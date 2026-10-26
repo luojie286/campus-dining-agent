@@ -16,3 +16,30 @@ application-private.yml
 /AGENTS.md
 /agent.md
 
+# Local development documentation and reference material
+/docs/
+/PLAN/
+/temp/
+/PROJECT_BRIEF.md
+
+# Local environment settings (keep example and production templates)
+.env
+.env.development
+.env.test
+.env.staging
+
+# Test output and temporary files
+coverage/
+*.tsbuildinfo
+*.tmp
+*.swp
+*~
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Personal password generation utility
+/backend/sky-server/src/test/java/com/sky/PasswordGenerator.java
+
