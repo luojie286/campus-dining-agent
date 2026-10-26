@@ -1,0 +1,18 @@
+node_modules/
+dist/
+target/
+.cache/
+.runtime/
+playwright-report/
+test-results/
+*.log
+.env.local
+.env.*.local
+application-private.yml
+.idea/
+*.iml
+
+# Local agent instructions
+/AGENTS.md
+/agent.md
+

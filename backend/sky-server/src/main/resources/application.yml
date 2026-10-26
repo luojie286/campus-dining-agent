@@ -1,0 +1,25 @@
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:8080}
+spring:
+  application:
+    name: campus-dining
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:bootstrap}
+  jackson:
+    time-zone: Asia/Shanghai
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+logging:
+  level:
+    com.sky: info
+sky:
+  jwt:
+    secret-key: ${JWT_SECRET_KEY:campus-dining-local-development-secret-key-change-me}
+    ttl: ${JWT_TTL:2h}

@@ -1,0 +1,8 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { LayoutDashboard, Utensils, Package, ClipboardList, ChartNoAxesCombined, Users, Tags, Sparkles, ShoppingBag, MapPin, Settings, Bell, Search, ArrowRight, ArrowUpRight, ChevronRight, ChevronLeft, ChevronDown, Plus, Minus, X, Check, LogOut, Sprout, SlidersHorizontal, Ellipsis, Pencil, Trash2, CircleHelp, RefreshCw, Send, Download, CircleCheck, CircleAlert, Clock, Truck, Store, LoaderCircle, PanelLeftClose, PanelLeftOpen, ExternalLink, ShieldCheck, Wifi, WifiOff, Eye, Heart, Leaf, CreditCard, ArrowLeft } from '@lucide/vue'
+const props = withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 })
+const icons: Record<string, unknown> = { dashboard: LayoutDashboard, dish: Utensils, setmeal: Package, orders: ClipboardList, reports: ChartNoAxesCombined, users: Users, categories: Tags, agent: Sparkles, cart: ShoppingBag, address: MapPin, settings: Settings, bell: Bell, search: Search, arrow: ArrowRight, upRight: ArrowUpRight, right: ChevronRight, left: ChevronLeft, down: ChevronDown, plus: Plus, minus: Minus, close: X, check: Check, logout: LogOut, sprout: Sprout, filter: SlidersHorizontal, more: Ellipsis, edit: Pencil, delete: Trash2, help: CircleHelp, refresh: RefreshCw, send: Send, download: Download, success: CircleCheck, error: CircleAlert, clock: Clock, truck: Truck, store: Store, loading: LoaderCircle, collapse: PanelLeftClose, expand: PanelLeftOpen, external: ExternalLink, shield: ShieldCheck, wifi: Wifi, offline: WifiOff, eye: Eye, heart: Heart, leaf: Leaf, payment: CreditCard, back: ArrowLeft }
+const icon = computed(() => icons[props.name] || CircleHelp)
+</script>
+<template><component :is="icon" :size="size" :stroke-width="1.8" aria-hidden="true" /></template>
