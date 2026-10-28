@@ -1,5 +1,7 @@
 package com.sky.service.impl;
 
+import org.springframework.context.annotation.Profile;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.sky.dto.UserLoginDTO;
 import com.sky.entity.User;
@@ -10,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
+@Profile("!bootstrap")
 public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;

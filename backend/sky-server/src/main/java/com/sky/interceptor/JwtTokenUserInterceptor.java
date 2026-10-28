@@ -1,5 +1,7 @@
 package com.sky.interceptor;
 
+import org.springframework.context.annotation.Profile;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sky.context.BaseContext;
 import com.sky.entity.User;
@@ -17,6 +19,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.io.IOException;
 
 @Component
+@Profile("!bootstrap")
 public class JwtTokenUserInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;

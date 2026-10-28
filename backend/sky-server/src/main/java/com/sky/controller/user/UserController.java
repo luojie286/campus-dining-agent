@@ -1,5 +1,7 @@
 package com.sky.controller.user;
 
+import org.springframework.context.annotation.Profile;
+
 import com.sky.dto.UserLoginDTO;
 import com.sky.entity.User;
 import com.sky.result.Result;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Profile("!bootstrap")
 @RequestMapping("/api/user")
 public class UserController {
 

@@ -1,0 +1,37 @@
+package com.sky.config;
+
+import com.sky.interceptor.JwtTokenAdminInterceptor;
+import com.sky.interceptor.JwtTokenUserInterceptor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+/**
+ * JWT鉴权需要查询账户当前状态，必须与数据库业务组件一起加载。
+ * bootstrap不注册业务Controller，也不创建这组数据库鉴权拦截器。
+ */
+@Configuration
+@Profile("!bootstrap")
+public class JwtWebMvcConfiguration implements WebMvcConfigurer {
+
+    private final JwtTokenAdminInterceptor adminInterceptor;
+    private final JwtTokenUserInterceptor userInterceptor;
+
+    public JwtWebMvcConfiguration(
+            JwtTokenAdminInterceptor adminInterceptor,
+            JwtTokenUserInterceptor userInterceptor) {
+        this.adminInterceptor = adminInterceptor;
+        this.userInterceptor = userInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/admin/**")
+                .excludePathPatterns("/api/admin/employee/login");
+
+        registry.addInterceptor(userInterceptor)
+                .addPathPatterns("/api/user/category/**");
+    }
+}

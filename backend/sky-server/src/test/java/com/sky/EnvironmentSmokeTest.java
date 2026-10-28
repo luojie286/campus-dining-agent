@@ -33,6 +33,10 @@ class EnvironmentSmokeTest {
 
     @Test void businessIsNotImplemented() throws Exception {
         mvc.perform(get("/api/admin/dish/page")).andExpect(status().isNotFound());
+        // 已实现的业务也必须在bootstrap中整体关闭，不能仅移除鉴权。
+        mvc.perform(get("/api/admin/employee/list")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/admin/category/list")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/user/category/list")).andExpect(status().isNotFound());
     }
 
     @Test void bootstrapDoesNotCreateDatabaseOrRedisConnections() {

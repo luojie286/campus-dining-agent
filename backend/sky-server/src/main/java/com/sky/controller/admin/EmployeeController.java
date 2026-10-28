@@ -1,5 +1,7 @@
 package com.sky.controller.admin;
 
+import org.springframework.context.annotation.Profile;
+
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.entity.Employee;
 import com.sky.result.Result;
@@ -26,6 +28,7 @@ import com.sky.dto.EmployeeUpdateDTO;
 import java.util.List;
 
 @RestController
+@Profile("!bootstrap")
 @RequestMapping("/api/admin/employee")
 
 public class EmployeeController {

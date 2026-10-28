@@ -1,5 +1,7 @@
 package com.sky.controller.admin;
 
+import org.springframework.context.annotation.Profile;
+
 import com.sky.dto.CategoryPageQueryDTO;
 import com.sky.dto.CategorySaveDTO;
 import com.sky.dto.CategoryStatusUpdateDTO;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController("adminCategoryController")
+@Profile("!bootstrap")
 @RequestMapping("/api/admin/category")
 public class CategoryController {
 

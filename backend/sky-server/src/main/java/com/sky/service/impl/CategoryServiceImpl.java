@@ -1,9 +1,10 @@
 package com.sky.service.impl;
 
+import org.springframework.context.annotation.Profile;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.sky.context.BaseContext;
 import com.sky.dto.CategoryPageQueryDTO;
 import com.sky.dto.CategorySaveDTO;
 import com.sky.dto.CategoryStatusUpdateDTO;
@@ -20,12 +21,11 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
 
 @Service
+@Profile("!bootstrap")
 public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryMapper categoryMapper;
@@ -49,18 +49,11 @@ public class CategoryServiceImpl implements CategoryService {
 
         ensureNameAvailable(dto.getName(), null);
 
-        LocalDateTime now = now();
-        Long currentId = BaseContext.getCurrentId();
-
         Category category = new Category();
         category.setName(dto.getName());
         category.setType(dto.getType());
         category.setSort(dto.getSort());
         category.setStatus(dto.getStatus());
-        category.setCreateTime(now);
-        category.setUpdateTime(now);
-        category.setCreateUser(currentId);
-        category.setUpdateUser(currentId);
 
         try {
             int rows = categoryMapper.insert(category);
@@ -103,20 +96,17 @@ public class CategoryServiceImpl implements CategoryService {
             return toVO(target);
         }
 
+        // 使用空的新实体接收审计值，业务更新字段仍由Wrapper明确指定。
+        Category auditEntity = new Category();
         try {
             int rows = categoryMapper.update(
-                    null,
+                    auditEntity,
                     new LambdaUpdateWrapper<Category>()
                             .eq(Category::getId, target.getId())
                             .set(Category::getName, dto.getName())
                             .set(Category::getType, dto.getType())
                             .set(Category::getSort, dto.getSort())
                             .set(Category::getStatus, dto.getStatus())
-                            .set(Category::getUpdateTime, now())
-                            .set(
-                                    Category::getUpdateUser,
-                                    BaseContext.getCurrentId()
-                            )
             );
 
             if (rows != 1) {
@@ -168,16 +158,12 @@ public class CategoryServiceImpl implements CategoryService {
             return toVO(target);
         }
 
+        Category auditEntity = new Category();
         int rows = categoryMapper.update(
-                null,
+                auditEntity,
                 new LambdaUpdateWrapper<Category>()
                         .eq(Category::getId, target.getId())
                         .set(Category::getStatus, dto.getStatus())
-                        .set(Category::getUpdateTime, now())
-                        .set(
-                                Category::getUpdateUser,
-                                BaseContext.getCurrentId()
-                        )
         );
 
         if (rows != 1) {
@@ -323,10 +309,6 @@ public class CategoryServiceImpl implements CategoryService {
                 category.getSort(),
                 category.getStatus()
         );
-    }
-
-    private LocalDateTime now() {
-        return LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
     }
 
     private String escapeLike(String keyword) {

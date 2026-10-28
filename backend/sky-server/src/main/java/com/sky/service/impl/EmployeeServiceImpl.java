@@ -1,8 +1,9 @@
 package com.sky.service.impl;
 
+import org.springframework.context.annotation.Profile;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.sky.constant.EmployeeRoleConstants;
-import com.sky.context.BaseContext;
 import com.sky.dto.EmployeeCreateDTO;
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.entity.Employee;
@@ -20,8 +21,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sky.dto.EmployeePageQueryDTO;
 import com.sky.result.PageResult;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.sky.dto.EmployeeStatusUpdateDTO;
@@ -32,6 +31,7 @@ import com.sky.dto.EmployeeUpdateDTO;
 import java.util.Objects;
 
 @Service
+@Profile("!bootstrap")
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper employeeMapper;
@@ -93,9 +93,8 @@ public class EmployeeServiceImpl implements EmployeeService {
             return toEmployeeVO(target);
         }
 
-        // 5. 构建明确的字段更新。
-        LocalDateTime now =
-                LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
+        // 新实体只承载审计字段，避免把查询到的旧资料整对象写回。
+        Employee auditEntity = new Employee();
 
         LambdaUpdateWrapper<Employee> updateWrapper =
                 new LambdaUpdateWrapper<Employee>()
@@ -105,12 +104,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 EmployeeRoleConstants.OPERATOR
                         )
                         .set(Employee::getName, dto.getName())
-                        .set(Employee::getPhone, dto.getPhone())
-                        .set(Employee::getUpdateTime, now)
-                        .set(
-                                Employee::getUpdateUser,
-                                BaseContext.getCurrentId()
-                        );
+                        .set(Employee::getPhone, dto.getPhone());
 
         // 只有请求实际包含status，才允许更新状态。
         if (dto.getStatus() != null) {
@@ -121,7 +115,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         // 6. 写入数据库。
-        int rows = employeeMapper.update(null, updateWrapper);
+        int rows = employeeMapper.update(auditEntity, updateWrapper);
 
         if (rows != 1) {
             throw new IllegalStateException("编辑运营账号失败");
@@ -229,14 +223,10 @@ public class EmployeeServiceImpl implements EmployeeService {
             return toEmployeeVO(target);
         }
 
-        // 7. 只更新状态和修改审计字段。
-        LocalDateTime now =
-                LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
-
-        Long currentId = BaseContext.getCurrentId();
-
+        // 切面填充新实体的审计字段，Wrapper仅指定状态及目标条件。
+        Employee auditEntity = new Employee();
         int rows = employeeMapper.update(
-                null,
+                auditEntity,
                 new LambdaUpdateWrapper<Employee>()
                         .eq(Employee::getId, id)
                         .eq(
@@ -244,8 +234,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                                 EmployeeRoleConstants.OPERATOR
                         )
                         .set(Employee::getStatus, targetStatus)
-                        .set(Employee::getUpdateTime, now)
-                        .set(Employee::getUpdateUser, currentId)
         );
 
         if (rows != 1) {
@@ -386,8 +374,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
-        Long currentOperatorId = BaseContext.getCurrentId();
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
 
         Employee employee = new Employee();
         employee.setUsername(username);
@@ -396,10 +382,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setStatus(dto.getStatus());
         employee.setPassword(encodedPassword);
         employee.setAccountRole(EmployeeRoleConstants.OPERATOR);
-        employee.setCreateTime(now);
-        employee.setUpdateTime(now);
-        employee.setCreateUser(currentOperatorId);
-        employee.setUpdateUser(currentOperatorId);
 
         // 数据库唯一索引兜底处理并发创建相同用户名的情况。
         try {

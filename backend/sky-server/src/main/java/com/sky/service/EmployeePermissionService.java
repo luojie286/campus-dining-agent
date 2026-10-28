@@ -1,5 +1,7 @@
 package com.sky.service;
 
+import org.springframework.context.annotation.Profile;
+
 import com.sky.constant.EmployeeRoleConstants;
 import com.sky.context.BaseContext;
 import com.sky.entity.Employee;
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 
 @Service
+@Profile("!bootstrap")
 public class EmployeePermissionService {
 
     private final EmployeeMapper employeeMapper;
