@@ -20,6 +20,9 @@ logging:
   level:
     com.sky: info
 sky:
+  dish:
+    # 未配置时允许无图新增，但拒绝外部图片地址；多个受控域名用逗号分隔。
+    allowed-image-hosts: ${DISH_IMAGE_HOSTS:}
   jwt:
     secret-key: ${JWT_SECRET_KEY:campus-dining-local-development-secret-key-change-me}
     ttl: ${JWT_TTL:2h}
