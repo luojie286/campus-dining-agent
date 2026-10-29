@@ -120,15 +120,31 @@ export const mock = {
     const session = requireSession(); const db = database()
     let items = db.menu.filter(x => !kind || x.kind === kind)
     if (session.role === 'user') items = items.filter(x => x.status === 1 && db.categories.some(c => c.id === x.categoryId && c.status === 1))
-    if (query.name) items = items.filter(x => x.name.includes(query.name!) || x.tags.some(t => t.includes(query.name!)))
+    if (query.name) {
+      const keyword = query.name.trim()
+      items = items.filter(x => x.name.includes(keyword) || (session.role !== 'admin' && x.tags.some(t => t.includes(keyword))))
+    }
     if (query.categoryId) items = items.filter(x => x.categoryId === query.categoryId)
     if (query.status !== undefined && query.status !== '') items = items.filter(x => x.status === Number(query.status))
+    items.sort((left, right) => {
+      const a = db.categories.find(category => category.id === left.categoryId)
+      const b = db.categories.find(category => category.id === right.categoryId)
+      return (a?.sort ?? 0) - (b?.sort ?? 0) || left.categoryId - right.categoryId || left.id - right.id
+    })
     return page(items, query)
+  },
+  async menuItem(kind: MenuItem['kind'], id: number): Promise<MenuItem> {
+    requireOperationsAccess()
+    const item = database().menu.find(item => item.id === id && item.kind === kind)
+    if (!item) throw new Error('商品不存在')
+    return clone(item)
   },
   async saveMenu(item: MenuItem): Promise<MenuItem> {
     requireSession('admin'); validateMenu(item)
     const list = database().menu; const index = list.findIndex(x => x.id === item.id)
     const saved = { ...clone(item), id: index >= 0 ? item.id : nextId(list) }
+    if (index >= 0) saved.stock = list[index]!.stock
+    if (item.status === 1 && !database().categories.find(category => category.id === item.categoryId)?.status) throw new Error('所属分类已禁用，不能起售')
     if (index >= 0) list[index] = saved; else list.push(saved)
     persist(); return clone(saved)
   },
@@ -137,7 +153,7 @@ export const mock = {
     if (db.menu.some(x => x.kind === 'setmeal' && x.composition.some(p => p.dishId === id))) throw new Error('该菜品被套餐引用，请先修改套餐组成')
     if (db.orders.some(o => !['COMPLETED', 'CANCELLED'].includes(o.status) && o.lines.some(l => l.itemId === id))) throw new Error('该商品关联未完成订单，请先停售，完成订单后再删除')
     const target = db.menu.find(x => x.id === id)
-    if (!target) throw new Error('商品不存在')
+    if (!target) return
     if (target.status === 1) throw new Error('请先停售，再删除商品')
     db.menu = db.menu.filter(x => x.id !== id); persist()
   },

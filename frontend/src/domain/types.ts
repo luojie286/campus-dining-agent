@@ -13,6 +13,7 @@ export interface Session {
 export interface Category { id: number; name: string; type: 1 | 2; sort: number; status: 0 | 1 }
 export interface CategoryPageQuery { page?: number; pageSize?: number; name?: string; type?: 1 | 2; status?: 0 | 1 }
 export interface MenuItem {
+  image?: string
   id: number; kind: ItemKind; name: string; categoryId: number; price: number
   description: string; status: 0 | 1; stock: number; tags: string[]
   art: 'chicken' | 'fish' | 'beef' | 'salad' | 'noodle' | 'tofu'

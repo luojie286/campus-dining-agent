@@ -1,17 +1,43 @@
 import { API_MODE, readSession, request } from './http'
 import { mock } from './mock'
 import { initialPasswordError } from '@/domain/operatorPassword'
+import { menuFormError } from '@/domain/menuForm'
 import type { Address, AgentReply, CartLine, Category, CategoryPageQuery, Dashboard, ListQuery, MenuItem, Operator, OperatorPageQuery, Order, Page, Role, Session, Shop } from '@/domain/types'
 
 // 所有真实接口集中于此；API_CONTRACT.md 与此文件保持一致。
 const rolePath = () => readSession()?.role === 'admin' ? '/admin' : '/user'
 const select = <T>(demo: () => Promise<T>, real: () => Promise<T>): Promise<T> => API_MODE === 'mock' ? demo() : real()
+
+async function menuItem(kind: MenuItem['kind'], id: number): Promise<MenuItem> {
+  return select(() => mock.menuItem(kind, id), () => request<MenuItem>(`/admin/${kind}/${id}`))
+}
+
+async function saveMenu(item: MenuItem): Promise<MenuItem> {
+  const error = menuFormError(item)
+  if (error) throw new Error(error)
+  // 显式白名单；编辑不携带库存，也不原样转发详情中的额外字段。
+  const { id, kind, categoryId, price, description, status, art } = item
+  const input = { id, kind, name: item.name.trim(), categoryId, price, description, status,
+    tags: [...item.tags], art, composition: item.composition.map(part => ({ ...part })) }
+  const body: typeof input & { stock?: number; image?: string } = { ...input }
+  if (!id) body.stock = item.stock
+  if (item.image !== undefined) body.image = item.image
+  return select(() => mock.saveMenu({ ...body, stock: item.stock }),
+    () => request<MenuItem>(`/admin/${kind}`, id ? 'PUT' : 'POST', body))
+}
+
 export const api = {
   login: (role: Role, username: string, password: string) => select(() => mock.login(role, username, password), () => request<Session>(role === 'admin' ? '/admin/employee/login' : '/user/login', 'POST', { username, password })),
   shop: () => select(mock.shop, () => request<Shop>(`${rolePath()}/shop`)),
   setShop: (open: boolean) => select(() => mock.setShop(open), () => request<Shop>('/admin/shop', 'PUT', { open })),
   menu: (kind?: 'dish' | 'setmeal', query: ListQuery = {}) => select(() => mock.menu(kind, query), () => request<Page<MenuItem>>(`${rolePath()}/${kind || 'menu'}/page`, 'GET', undefined, { ...query })),
-  saveMenu: (item: MenuItem) => select(() => mock.saveMenu(item), () => request<MenuItem>(`/admin/${item.kind}`, item.id ? 'PUT' : 'POST', item)),
+  menuItem,
+  saveMenu,
+  setMenuStatus: async (item: MenuItem, status: MenuItem['status']): Promise<MenuItem> => {
+    // 后端专用状态接口尚未实现，暂走合同保留的PUT兼容分支，先读最新资料。
+    const current = await menuItem(item.kind, item.id)
+    return saveMenu({ ...current, status })
+  },
   deleteMenu: (item: MenuItem) => select(() => mock.deleteMenu(item.id), () => request<void>(`/admin/${item.kind}/${item.id}`, 'DELETE')),
   categories: () => select(mock.categories, () => request<Category[]>(`${rolePath()}/category/list`)),
   categoriesPage: (query: CategoryPageQuery = {}) => select(

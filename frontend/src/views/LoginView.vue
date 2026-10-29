@@ -17,9 +17,13 @@ async function login() {
     const session = await api.login(role.value, username.value.trim(), password.value)
     if (session.role !== role.value) throw new Error('登录返回的角色与入口不一致，请检查后端登录协议')
     setSession(session)
-    try { await refreshBase() } catch (e) { toast(e instanceof Error ? e.message : '基础接口尚未实现', 'info') }
     const target = String(route.query.redirect || '')
-    await router.push(target.startsWith(`/${session.role}/`) ? target : session.role === 'admin' ? '/admin/dashboard' : '/user/menu')
+    const destination = target.startsWith(`/${session.role}/`) ? target : session.role === 'admin' ? '/admin/dashboard' : '/user/menu'
+    // 菜品管理独立加载分类及分页，不因其他未完成的基础接口误报登录失败。
+    if (destination !== '/admin/dishes') {
+      try { await refreshBase() } catch (e) { toast(e instanceof Error ? e.message : '基础接口尚未实现', 'info') }
+    }
+    await router.push(destination)
   } catch (e) { error.value = e instanceof Error ? e.message : '登录失败'; if (app.session) setSession(null) }
   finally { busy.value = false }
 }

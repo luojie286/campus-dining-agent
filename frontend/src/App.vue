@@ -42,8 +42,10 @@ watch(() => app.session, session => {
 })
 watch(() => route.path, () => { mobileOpen.value = false })
 onMounted(async () => {
+  // 首次路由解析完成后再决定需要哪些基础数据，避免直达菜品页时误加载合并菜单。
+  await router.isReady()
   notifications.connect(app.session)
-  if (app.session) await safely(refreshBase)
+  if (app.session && route.path !== '/admin/dishes') await safely(refreshBase)
 })
 </script>
 

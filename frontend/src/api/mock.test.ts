@@ -20,6 +20,16 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('演示数据层的关键行为', () => {
+  it('商品详情返回副本，编辑保持库存，删除不存在记录按目标结果成功', async () => {
+    const mock = await service(admin)
+    const current = (await mock.menu('dish')).records[0]!
+    const detail = await mock.menuItem('dish', current.id)
+    detail.name = '本地表单未保存'
+    expect((await mock.menuItem('dish', current.id)).name).toBe(current.name)
+    expect((await mock.saveMenu({ ...current, stock: 999 })).stock).toBe(current.stock)
+    await expect(mock.menuItem('dish', 999999)).rejects.toThrow('商品不存在')
+    await expect(mock.deleteMenu(999999)).resolves.toBeUndefined()
+  })
   it('普通运营可分页维护分类，停用不改商品状态，引用分类不能删除', async () => {
     const mock = await service({ id: 2, name: '运营', role: 'admin', token: 'demo-admin-2', accountRole: 'OPERATOR' })
     const created = await mock.saveCategory({ id: 0, name: ' 测试_% ', type: 2, sort: 0, status: 1 })
