@@ -3,6 +3,12 @@ package com.sky.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sky.dto.DishPageQueryDTO;
+import com.sky.result.PageResult;
+import java.util.ArrayList;
 import com.sky.dto.DishCreateDTO;
 import com.sky.entity.Category;
 import com.sky.entity.Dish;
@@ -33,6 +39,52 @@ import java.util.Set;
 public class DishServiceImpl implements DishService {
 
     private static final long MAX_PUBLIC_ID = 9007199254740991L;
+
+    @Override
+    public PageResult<DishVO> pageQuery(DishPageQueryDTO dto) {
+        permissionService.requireOperationsAccess();
+        Page<Dish> page = new Page<>(dto.getPage(), dto.getPageSize());
+        IPage<Dish> result = dishMapper.selectDishPage(
+                page, dto, buildNamePattern(dto.getName()));
+        List<DishVO> records = new ArrayList<>();
+        for (Dish dish : result.getRecords()) {
+            records.add(toVO(dish, readTags(dish.getTags())));
+        }
+        return new PageResult<>(result.getTotal(), records);
+    }
+
+    private String buildNamePattern(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        // 先转义!，避免把随后添加的LIKE转义符重复转义。
+        String escaped = name.replace("!", "!!")
+                .replace("%", "!%").replace("_", "!_");
+        return "%" + escaped + "%";
+    }
+
+    private List<String> readTags(String tagsJson) {
+        if (tagsJson == null) {
+            throw new IllegalStateException("数据库菜品标签不能为空");
+        }
+        try {
+            JsonNode root = objectMapper.readTree(tagsJson);
+            if (root == null || !root.isArray()) {
+                throw new IllegalStateException("数据库菜品标签必须是JSON数组");
+            }
+            List<String> tags = new ArrayList<>();
+            for (JsonNode item : root) {
+                if (!item.isTextual()) {
+                    throw new IllegalStateException("数据库菜品标签必须为字符串");
+                }
+                tags.add(item.textValue());
+            }
+            return tags;
+        } catch (JsonProcessingException exception) {
+            // 存储数据损坏不能伪装成客户端400，也不能吞掉后返回空标签。
+            throw new IllegalStateException("数据库菜品标签JSON格式错误", exception);
+        }
+    }
 
     private final DishMapper dishMapper;
     private final CategoryMapper categoryMapper;

@@ -4,6 +4,10 @@ import com.sky.dto.DishCreateDTO;
 import com.sky.result.Result;
 import com.sky.service.DishService;
 import com.sky.vo.DishVO;
+import com.sky.dto.DishPageQueryDTO;
+import com.sky.result.PageResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class DishController {
 
     private final DishService dishService;
+
+    @GetMapping("/page")
+    public Result<PageResult<DishVO>> page(
+            @Valid @ModelAttribute DishPageQueryDTO dto) {
+        return Result.success(dishService.pageQuery(dto));
+    }
 
     public DishController(DishService dishService) {
         this.dishService = dishService;
