@@ -1,6 +1,10 @@
 package com.sky.controller.admin;
 
 import com.sky.dto.DishCreateDTO;
+import com.sky.dto.DishUpdateDTO;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.sky.result.Result;
 import com.sky.service.DishService;
 import com.sky.vo.DishVO;
@@ -21,6 +25,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class DishController {
 
     private final DishService dishService;
+
+    @GetMapping("/{id}")
+    public Result<DishVO> getById(@PathVariable("id") Long id) {
+        return Result.success(dishService.getById(id));
+    }
+
+    @PutMapping
+    public Result<DishVO> update(@Valid @RequestBody DishUpdateDTO dto) {
+        return Result.success(dishService.update(dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable("id") Long id) {
+        dishService.delete(id);
+        return Result.success(null);
+    }
 
     @GetMapping("/page")
     public Result<PageResult<DishVO>> page(

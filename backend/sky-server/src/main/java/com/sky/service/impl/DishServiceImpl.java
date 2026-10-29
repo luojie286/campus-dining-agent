@@ -10,6 +10,10 @@ import com.sky.dto.DishPageQueryDTO;
 import com.sky.result.PageResult;
 import java.util.ArrayList;
 import com.sky.dto.DishCreateDTO;
+import com.sky.dto.DishUpdateDTO;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import java.util.Objects;
+import java.util.TreeSet;
 import com.sky.entity.Category;
 import com.sky.entity.Dish;
 import com.sky.exception.BadRequestException;
@@ -39,6 +43,187 @@ import java.util.Set;
 public class DishServiceImpl implements DishService {
 
     private static final long MAX_PUBLIC_ID = 9007199254740991L;
+
+    @Override
+    public DishVO getById(Long itemId) {
+        permissionService.requireOperationsAccess();
+        Dish dish = dishMapper.selectById(toDatabaseId(itemId));
+        if (dish == null) {
+            throw new NotFoundException("菜品不存在");
+        }
+        return toVO(dish, readTags(dish.getTags()));
+    }
+
+    private Long toDatabaseId(Long itemId) {
+        if (itemId == null || itemId <= 0 || itemId > MAX_PUBLIC_ID || itemId % 2 != 0) {
+            throw new BadRequestException("菜品ID必须是有效的正偶数");
+        }
+        return itemId / 2;
+    }
+
+    /**
+     * 在事务内按分类ID升序、再菜品行的顺序加锁，与现有分类操作协调。
+     * 初读只决定锁集合，锁定后重新核对分类，变化时返回冲突而不是使用旧值。
+     */
+    private Dish lockDish(Long databaseId, Long newCategoryId) {
+        Dish observed = dishMapper.selectById(databaseId);
+        if (observed == null) {
+            return null;
+        }
+        TreeSet<Long> categoryIds = new TreeSet<>();
+        categoryIds.add(observed.getCategoryId());
+        if (newCategoryId != null) {
+            categoryIds.add(newCategoryId);
+        }
+        for (Long categoryId : categoryIds) {
+            categoryMapper.selectOne(new LambdaQueryWrapper<Category>()
+                    .eq(Category::getId, categoryId).last("FOR UPDATE"));
+        }
+        Dish locked = dishMapper.selectOne(new LambdaQueryWrapper<Dish>()
+                .eq(Dish::getId, databaseId).last("FOR UPDATE"));
+        if (locked != null && !Objects.equals(observed.getCategoryId(), locked.getCategoryId())) {
+            throw new ConflictException("菜品分类已变化，请刷新后重试");
+        }
+        return locked;
+    }
+
+    @Override
+    @Transactional
+    public DishVO update(DishUpdateDTO dto) {
+        permissionService.requireOperationsAccess();
+        Long databaseId = toDatabaseId(dto.getId());
+        Dish target = lockDish(databaseId, dto.getCategoryId());
+        if (target == null) {
+            throw new NotFoundException("菜品不存在");
+        }
+        BigDecimal price = normalizePrice(dto.getPrice());
+        validateTags(dto.getTags());
+        // 缺省保留旧图；显式null已由DTO拒绝，不引入隐式清图行为。
+        String image = target.getImage();
+        if (dto.getImage() != null) {
+            validateImage(dto.getImage());
+            image = dto.getImage();
+        }
+        Category category = categoryMapper.selectOne(new LambdaQueryWrapper<Category>()
+                .eq(Category::getId, dto.getCategoryId()).last("FOR UPDATE"));
+        if (category == null) {
+            throw new NotFoundException("分类不存在");
+        }
+        if (!Integer.valueOf(1).equals(category.getType())) {
+            throw new BadRequestException("菜品必须关联菜品分类");
+        }
+        if (Integer.valueOf(1).equals(dto.getStatus()) && !Integer.valueOf(1).equals(category.getStatus())) {
+            throw new ConflictException("所属分类已禁用，不能起售");
+        }
+        ensureUpdateNameAvailable(dto.getName(), databaseId);
+        List<String> oldTags = readTags(target.getTags());
+        boolean unchanged = Objects.equals(dto.getName(), target.getName())
+                && Objects.equals(dto.getCategoryId(), target.getCategoryId())
+                && price.compareTo(target.getPrice()) == 0
+                && Objects.equals(dto.getDescription(), target.getDescription())
+                && Objects.equals(dto.getStatus(), target.getStatus())
+                && Objects.equals(dto.getTags(), oldTags)
+                && Objects.equals(dto.getArt(), target.getArt())
+                && Objects.equals(image, target.getImage());
+        if (unchanged) {
+            return toVO(target, oldTags);
+        }
+        String tagsJson = writeTags(dto.getTags());
+        // 不传整实体回写。库存和创建字段均不在更新白名单中。
+        Dish auditEntity = new Dish();
+        LambdaUpdateWrapper<Dish> wrapper = new LambdaUpdateWrapper<Dish>()
+                .eq(Dish::getId, databaseId)
+                .set(Dish::getName, dto.getName())
+                .set(Dish::getCategoryId, dto.getCategoryId())
+                .set(Dish::getPrice, price)
+                .set(Dish::getDescription, dto.getDescription())
+                .set(Dish::getStatus, dto.getStatus())
+                .set(Dish::getTags, tagsJson)
+                .set(Dish::getArt, dto.getArt())
+                .set(Dish::getImage, image);
+        try {
+            if (dishMapper.update(auditEntity, wrapper) != 1) {
+                throw new IllegalStateException("编辑菜品失败");
+            }
+        } catch (DuplicateKeyException exception) {
+            ensureUpdateNameAvailable(dto.getName(), databaseId);
+            throw exception;
+        }
+        target.setName(dto.getName());
+        target.setCategoryId(dto.getCategoryId());
+        target.setPrice(price);
+        target.setDescription(dto.getDescription());
+        target.setStatus(dto.getStatus());
+        target.setTags(tagsJson);
+        target.setArt(dto.getArt());
+        target.setImage(image);
+        return toVO(target, dto.getTags());
+    }
+
+    private void ensureUpdateNameAvailable(String name, Long databaseId) {
+        Dish duplicate = dishMapper.selectOne(new LambdaQueryWrapper<Dish>()
+                .select(Dish::getId).eq(Dish::getName, name)
+                .ne(Dish::getId, databaseId).last("FOR UPDATE"));
+        if (duplicate != null) {
+            throw new ConflictException("菜品名称已存在");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long itemId) {
+        permissionService.requireOperationsAccess();
+        Long databaseId = toDatabaseId(itemId);
+        Dish target = lockDish(databaseId, null);
+        if (target == null) {
+            return; // 按目标结果幂等，重复删除仍成功。
+        }
+        if (!Integer.valueOf(0).equals(target.getStatus())) {
+            throw new ConflictException("请先停售菜品再删除");
+        }
+        if (dishMapper.findSetmealReference(databaseId) != null) {
+            throw new ConflictException("菜品被套餐引用，不能删除");
+        }
+        if (dishMapper.findPendingOrderReference(databaseId) != null) {
+            throw new ConflictException("菜品被未完成订单引用，不能删除");
+        }
+        for (String snapshot : dishMapper.selectPendingInventorySnapshots()) {
+            if (snapshotContainsDish(snapshot, databaseId)) {
+                throw new ConflictException("菜品被未完成订单库存快照引用，不能删除");
+            }
+        }
+        dishMapper.deleteFlavors(databaseId);
+        if (dishMapper.deleteById(databaseId) != 1) {
+            throw new IllegalStateException("删除菜品失败");
+        }
+    }
+
+    private boolean snapshotContainsDish(String snapshot, Long databaseId) {
+        if (snapshot == null) {
+            throw new IllegalStateException("订单库存快照不能为空");
+        }
+        try {
+            JsonNode root = objectMapper.readTree(snapshot);
+            if (root == null || !root.isArray()) {
+                throw new IllegalStateException("订单库存快照格式错误");
+            }
+            for (JsonNode item : root) {
+                JsonNode kind = item.get("kind");
+                JsonNode id = item.get("id");
+                if (!item.isObject() || kind == null || !kind.isTextual()
+                        || id == null || !id.isIntegralNumber()
+                        || !id.canConvertToLong() || id.longValue() <= 0) {
+                    throw new IllegalStateException("订单库存快照条目错误");
+                }
+                if ("dish".equals(kind.textValue()) && id.longValue() == databaseId.longValue()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("订单库存快照JSON格式错误", exception);
+        }
+    }
 
     @Override
     public PageResult<DishVO> pageQuery(DishPageQueryDTO dto) {
