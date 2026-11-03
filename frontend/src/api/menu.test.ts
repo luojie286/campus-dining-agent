@@ -63,3 +63,10 @@ it('分页保留停售筛选、关键词和每页条数', async () => {
   expect(url.pathname).toBe('/api/admin/dish/page')
   expect(Object.fromEntries(url.searchParams)).toEqual({ page: '2', pageSize: '20', name: '%_!', status: '0', categoryId: '1' })
 })
+
+it('套餐启停只提交目标状态，避免回写旧资料', async () => {
+  const { api } = await import('./index')
+  await api.setMenuStatus({ ...item, id: 3, kind: 'setmeal', composition: [{ dishId: 2, quantity: 1 }] }, 1)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch).toHaveBeenCalledWith('/api/admin/setmeal/3/status', expect.objectContaining({ method: 'PUT', body: '{"status":1}' }))
+})

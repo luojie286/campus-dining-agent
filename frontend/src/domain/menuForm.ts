@@ -13,5 +13,15 @@ export function menuFormError(item: MenuItem): string | null {
   if (item.tags.some(tag => !allowed.includes(tag)) || new Set(item.tags).size !== item.tags.length) return '标签不合法或重复'
   if (item.tags.filter(tag => ['不辣', '微辣', '辣'].includes(tag)).length > 1) return '辣度标签不能同时选择多个'
   if (item.kind === 'dish' && item.composition.length) return '菜品不能包含套餐组成'
+  if (item.kind === 'setmeal') {
+    if (!item.composition.length || item.composition.length > 100) return '套餐必须包含1到100种菜品'
+    const ids = new Set<number>()
+    for (const part of item.composition) {
+      if (!Number.isSafeInteger(part.dishId) || part.dishId < 2 || part.dishId % 2 !== 0) return '请选择有效菜品，套餐不能嵌套套餐'
+      if (ids.has(part.dishId)) return '套餐组成菜品不能重复'
+      ids.add(part.dishId)
+      if (!Number.isInteger(part.quantity) || part.quantity < 1 || part.quantity > 99) return '组成菜品份数必须为1到99的整数'
+    }
+  }
   return null
 }

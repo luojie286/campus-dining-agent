@@ -15,7 +15,7 @@ import java.util.List;
 @Getter
 public class SetmealUpdateDTO {
 
-    @NotNull(message = "新增占位ID不能为空")
+    @NotNull(message = "套餐ID不能为空")
     @Min(value = 3, message = "套餐ID不合法")
     @Max(value = 9007199254740991L, message = "套餐ID超出范围")
     private Long id;
@@ -72,7 +72,7 @@ public class SetmealUpdateDTO {
     private String art;
 
     // 组成只接收菜品ID和数量，名称及价格由服务端读取。
-    @NotNull(message = "composition必须为空数组")
+    @NotNull(message = "套餐组成不能为空")
     @Size(min = 1, max = 100, message = "套餐必须包含1到100种菜品")
     @Valid
     private List<@NotNull SetmealCompositionDTO> composition;

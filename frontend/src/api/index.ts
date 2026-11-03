@@ -34,7 +34,11 @@ export const api = {
   menuItem,
   saveMenu,
   setMenuStatus: async (item: MenuItem, status: MenuItem['status']): Promise<MenuItem> => {
-    // 后端专用状态接口尚未实现，暂走合同保留的PUT兼容分支，先读最新资料。
+    if (item.kind === 'setmeal') {
+      return select(async () => mock.saveMenu({ ...await mock.menuItem('setmeal', item.id), status }),
+        () => request<MenuItem>(`/admin/setmeal/${item.id}/status`, 'PUT', { status }))
+    }
+    // 菜品后端专用状态接口尚未实现，兼容PUT前先读最新资料。
     const current = await menuItem(item.kind, item.id)
     return saveMenu({ ...current, status })
   },

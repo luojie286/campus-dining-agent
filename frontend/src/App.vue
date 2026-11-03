@@ -45,7 +45,7 @@ onMounted(async () => {
   // 首次路由解析完成后再决定需要哪些基础数据，避免直达菜品页时误加载合并菜单。
   await router.isReady()
   notifications.connect(app.session)
-  if (app.session && route.path !== '/admin/dishes') await safely(refreshBase)
+  if (app.session && !['/admin/dishes', '/admin/setmeals'].includes(route.path)) await safely(refreshBase)
 })
 </script>
 

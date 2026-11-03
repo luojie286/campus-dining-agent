@@ -73,7 +73,7 @@ public class SetmealCreateDTO {
     private String art;
 
     // 组成只接收菜品ID和数量，名称及价格由服务端读取。
-    @NotNull(message = "composition必须为空数组")
+    @NotNull(message = "套餐组成不能为空")
     @Size(min = 1, max = 100, message = "套餐必须包含1到100种菜品")
     @Valid
     private List<@NotNull SetmealCompositionDTO> composition;

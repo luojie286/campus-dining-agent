@@ -1,4 +1,8 @@
 package com.sky.controller.admin;
+import com.sky.result.PageResult;
+import com.sky.dto.SetmealPageQueryDTO;
+import com.sky.dto.SetmealUpdateDTO;
+import com.sky.dto.SetmealStatusUpdateDTO;
 import com.sky.dto.SetmealCreateDTO;
 import com.sky.result.Result;
 import com.sky.service.SetmealService;
@@ -15,8 +19,8 @@ public class SetmealController {
     public SetmealController(SetmealService service) { this.service = service; }
 
     @GetMapping("/page")
-    public Result<com.sky.result.PageResult<SetmealVO>> page(
-            @Valid @ModelAttribute com.sky.dto.SetmealPageQueryDTO dto) {
+    public Result<PageResult<SetmealVO>> page(
+            @Valid @ModelAttribute SetmealPageQueryDTO dto) {
         return Result.success(service.pageQuery(dto));
     }
 
@@ -26,7 +30,7 @@ public class SetmealController {
     }
 
     @PutMapping
-    public Result<SetmealVO> update(@Valid @RequestBody com.sky.dto.SetmealUpdateDTO dto) {
+    public Result<SetmealVO> update(@Valid @RequestBody SetmealUpdateDTO dto) {
         return Result.success(service.update(dto));
     }
 
@@ -38,7 +42,7 @@ public class SetmealController {
 
     @PutMapping("/{id}/status")
     public Result<SetmealVO> status(@PathVariable("id") Long id,
-            @Valid @RequestBody com.sky.dto.SetmealStatusUpdateDTO dto) {
+            @Valid @RequestBody SetmealStatusUpdateDTO dto) {
         return Result.success(service.updateStatus(id, dto.getStatus()));
     }
 

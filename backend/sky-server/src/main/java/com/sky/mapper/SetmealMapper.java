@@ -1,4 +1,7 @@
 package com.sky.mapper;
+import com.sky.dto.SetmealPageQueryDTO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
@@ -9,9 +12,9 @@ import org.apache.ibatis.annotations.*;
 
 @Mapper
 public interface SetmealMapper extends BaseMapper<Setmeal> {
-    com.baomidou.mybatisplus.core.metadata.IPage<Setmeal> selectSetmealPage(
-            com.baomidou.mybatisplus.extension.plugins.pagination.Page<Setmeal> page,
-            @Param("query") com.sky.dto.SetmealPageQueryDTO query,
+    IPage<Setmeal> selectSetmealPage(
+            Page<Setmeal> page,
+            @Param("query") SetmealPageQueryDTO query,
             @Param("namePattern") String namePattern);
 
     @Select("SELECT od.id FROM order_detail od JOIN orders o ON o.id=od.order_id "

@@ -1,4 +1,8 @@
 package com.sky.service.impl;
+import com.sky.result.PageResult;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import org.springframework.transaction.annotation.Isolation;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -57,7 +61,7 @@ public class SetmealServiceImpl implements SetmealService {
         // 已达到目标状态时不写审计；依赖变化不会暗改套餐自身status。
         if (Objects.equals(meal.getStatus(), status)) return toVO(meal, relations(id));
         if (status == 1) validateSale(meal.getCategoryId(), status, locked.parts(), locked.dishes());
-        var wrapper = new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Setmeal>()
+        var wrapper = new LambdaUpdateWrapper<Setmeal>()
                 .eq(Setmeal::getId, id).set(Setmeal::getStatus, status);
         if (setmealMapper.update(new Setmeal(), wrapper) != 1) throw new IllegalStateException("修改套餐状态失败");
         meal.setStatus(status);
@@ -72,7 +76,7 @@ public class SetmealServiceImpl implements SetmealService {
     }
 
     @Override
-    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SetmealVO getById(Long id) {
         permissionService.requireOperationsAccess();
         Setmeal meal = setmealMapper.selectById(databaseId(id));
@@ -136,7 +140,7 @@ public class SetmealServiceImpl implements SetmealService {
                 && Objects.equals(meal.getImage(), image) && locked.parts().equals(parts);
         if (unchanged) return toVO(meal, relations(id));
         // 新审计实体配合字段白名单：库存、创建字段不会进入更新SQL。
-        var wrapper = new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Setmeal>()
+        var wrapper = new LambdaUpdateWrapper<Setmeal>()
                 .eq(Setmeal::getId, id).set(Setmeal::getName, dto.getName())
                 .set(Setmeal::getCategoryId, dto.getCategoryId()).set(Setmeal::getPrice, price)
                 .set(Setmeal::getDescription, dto.getDescription()).set(Setmeal::getStatus, dto.getStatus())
@@ -179,8 +183,8 @@ public class SetmealServiceImpl implements SetmealService {
     }
 
     @Override
-    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public com.sky.result.PageResult<SetmealVO> pageQuery(SetmealPageQueryDTO dto) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResult<SetmealVO> pageQuery(SetmealPageQueryDTO dto) {
         permissionService.requireOperationsAccess();
         String pattern = null;
         if (dto.getName() != null && !dto.getName().isBlank()) {
@@ -188,7 +192,7 @@ public class SetmealServiceImpl implements SetmealService {
                     .replace("_", "!_") + "%";
         }
         var page = setmealMapper.selectSetmealPage(
-                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(dto.getPage(), dto.getPageSize()),
+                new Page<>(dto.getPage(), dto.getPageSize()),
                 dto, pattern);
         List<SetmealVO> records = new ArrayList<>();
         if (!page.getRecords().isEmpty()) {
@@ -203,7 +207,7 @@ public class SetmealServiceImpl implements SetmealService {
                 records.add(toVO(meal, groups.getOrDefault(meal.getId(), List.of())));
             }
         }
-        return new com.sky.result.PageResult<>(page.getTotal(), records);
+        return new PageResult<>(page.getTotal(), records);
     }
 
     @Override
@@ -416,7 +420,7 @@ public class SetmealServiceImpl implements SetmealService {
     }
 
     /**
-     * 本示例先支持受控HTTPS图片域名。
+     * 图片沿用菜品模块的受控HTTPS域名配置。
      * 未配置时允许不传图片，但不能接受任意外部地址。
      */
     private void validateImage(String image) {
@@ -454,24 +458,24 @@ public class SetmealServiceImpl implements SetmealService {
 
     private List<String> readTags(String tagsJson) {
         if (tagsJson == null) {
-            throw new IllegalStateException("数据库菜品标签不能为空");
+            throw new IllegalStateException("数据库套餐标签不能为空");
         }
         try {
             JsonNode root = objectMapper.readTree(tagsJson);
             if (root == null || !root.isArray()) {
-                throw new IllegalStateException("数据库菜品标签必须是JSON数组");
+                throw new IllegalStateException("数据库套餐标签必须是JSON数组");
             }
             List<String> tags = new ArrayList<>();
             for (JsonNode item : root) {
                 if (!item.isTextual()) {
-                    throw new IllegalStateException("数据库菜品标签必须为字符串");
+                    throw new IllegalStateException("数据库套餐标签必须为字符串");
                 }
                 tags.add(item.textValue());
             }
             return tags;
         } catch (JsonProcessingException exception) {
             // 存储数据损坏不能伪装成客户端400，也不能吞掉后返回空标签。
-            throw new IllegalStateException("数据库菜品标签JSON格式错误", exception);
+            throw new IllegalStateException("数据库套餐标签JSON格式错误", exception);
         }
     }
 
