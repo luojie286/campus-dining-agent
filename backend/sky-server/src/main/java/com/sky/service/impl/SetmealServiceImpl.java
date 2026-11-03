@@ -46,6 +46,24 @@ public class SetmealServiceImpl implements SetmealService {
         }
     }
 
+    @Override
+    @Transactional
+    public SetmealVO updateStatus(Long itemId, Integer status) {
+        permissionService.requireOperationsAccess();
+        Long id = databaseId(itemId);
+        LockedMeal locked = lockMeal(id, null, Set.of());
+        if (locked == null) throw new NotFoundException("套餐不存在");
+        Setmeal meal = locked.meal();
+        // 已达到目标状态时不写审计；依赖变化不会暗改套餐自身status。
+        if (Objects.equals(meal.getStatus(), status)) return toVO(meal, relations(id));
+        if (status == 1) validateSale(meal.getCategoryId(), status, locked.parts(), locked.dishes());
+        var wrapper = new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Setmeal>()
+                .eq(Setmeal::getId, id).set(Setmeal::getStatus, status);
+        if (setmealMapper.update(new Setmeal(), wrapper) != 1) throw new IllegalStateException("修改套餐状态失败");
+        meal.setStatus(status);
+        return toVO(meal, relations(id));
+    }
+
     private Long databaseId(Long itemId) {
         if (itemId == null || itemId <= 1 || itemId > MAX_PUBLIC_ID || itemId % 2 != 1) {
             throw new BadRequestException("套餐ID必须是大于1的有效奇数");

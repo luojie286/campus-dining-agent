@@ -36,6 +36,12 @@ public class SetmealController {
         return Result.success(null);
     }
 
+    @PutMapping("/{id}/status")
+    public Result<SetmealVO> status(@PathVariable("id") Long id,
+            @Valid @RequestBody com.sky.dto.SetmealStatusUpdateDTO dto) {
+        return Result.success(service.updateStatus(id, dto.getStatus()));
+    }
+
     @PostMapping
     public Result<SetmealVO> create(@Valid @RequestBody SetmealCreateDTO dto) {
         return Result.success(service.create(dto));
