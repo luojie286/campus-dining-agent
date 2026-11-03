@@ -14,6 +14,12 @@ public class SetmealController {
     private final SetmealService service;
     public SetmealController(SetmealService service) { this.service = service; }
 
+    @GetMapping("/page")
+    public Result<com.sky.result.PageResult<SetmealVO>> page(
+            @Valid @ModelAttribute com.sky.dto.SetmealPageQueryDTO dto) {
+        return Result.success(service.pageQuery(dto));
+    }
+
     @PostMapping
     public Result<SetmealVO> create(@Valid @RequestBody SetmealCreateDTO dto) {
         return Result.success(service.create(dto));

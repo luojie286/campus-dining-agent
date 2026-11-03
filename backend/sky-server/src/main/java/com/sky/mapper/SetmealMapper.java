@@ -9,6 +9,11 @@ import org.apache.ibatis.annotations.*;
 
 @Mapper
 public interface SetmealMapper extends BaseMapper<Setmeal> {
+    com.baomidou.mybatisplus.core.metadata.IPage<Setmeal> selectSetmealPage(
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<Setmeal> page,
+            @Param("query") com.sky.dto.SetmealPageQueryDTO query,
+            @Param("namePattern") String namePattern);
+
     @Override
     @AutoFill(OperationType.INSERT)
     int insert(Setmeal setmeal);

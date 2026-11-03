@@ -47,6 +47,34 @@ public class SetmealServiceImpl implements SetmealService {
     }
 
     @Override
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public com.sky.result.PageResult<SetmealVO> pageQuery(SetmealPageQueryDTO dto) {
+        permissionService.requireOperationsAccess();
+        String pattern = null;
+        if (dto.getName() != null && !dto.getName().isBlank()) {
+            pattern = "%" + dto.getName().replace("!", "!!").replace("%", "!%")
+                    .replace("_", "!_") + "%";
+        }
+        var page = setmealMapper.selectSetmealPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(dto.getPage(), dto.getPageSize()),
+                dto, pattern);
+        List<SetmealVO> records = new ArrayList<>();
+        if (!page.getRecords().isEmpty()) {
+            List<Long> ids = new ArrayList<>();
+            for (Setmeal meal : page.getRecords()) ids.add(meal.getId());
+            Map<Long, List<SetmealDish>> groups = new HashMap<>();
+            for (SetmealDish relation : relationMapper.selectList(new LambdaQueryWrapper<SetmealDish>()
+                    .in(SetmealDish::getSetmealId, ids).orderByAsc(SetmealDish::getDishId))) {
+                groups.computeIfAbsent(relation.getSetmealId(), key -> new ArrayList<>()).add(relation);
+            }
+            for (Setmeal meal : page.getRecords()) {
+                records.add(toVO(meal, groups.getOrDefault(meal.getId(), List.of())));
+            }
+        }
+        return new com.sky.result.PageResult<>(page.getTotal(), records);
+    }
+
+    @Override
     @Transactional
     public SetmealVO create(SetmealCreateDTO dto) {
         permissionService.requireOperationsAccess();
