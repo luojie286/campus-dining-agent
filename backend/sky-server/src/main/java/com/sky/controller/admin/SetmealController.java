@@ -20,6 +20,22 @@ public class SetmealController {
         return Result.success(service.pageQuery(dto));
     }
 
+    @GetMapping("/{id}")
+    public Result<SetmealVO> detail(@PathVariable("id") Long id) {
+        return Result.success(service.getById(id));
+    }
+
+    @PutMapping
+    public Result<SetmealVO> update(@Valid @RequestBody com.sky.dto.SetmealUpdateDTO dto) {
+        return Result.success(service.update(dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable("id") Long id) {
+        service.delete(id);
+        return Result.success(null);
+    }
+
     @PostMapping
     public Result<SetmealVO> create(@Valid @RequestBody SetmealCreateDTO dto) {
         return Result.success(service.create(dto));

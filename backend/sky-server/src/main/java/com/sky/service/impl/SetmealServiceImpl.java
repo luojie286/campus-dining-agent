@@ -46,6 +46,120 @@ public class SetmealServiceImpl implements SetmealService {
         }
     }
 
+    private Long databaseId(Long itemId) {
+        if (itemId == null || itemId <= 1 || itemId > MAX_PUBLIC_ID || itemId % 2 != 1) {
+            throw new BadRequestException("套餐ID必须是大于1的有效奇数");
+        }
+        return (itemId - 1) / 2;
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public SetmealVO getById(Long id) {
+        permissionService.requireOperationsAccess();
+        Setmeal meal = setmealMapper.selectById(databaseId(id));
+        if (meal == null) throw new NotFoundException("套餐不存在");
+        return toVO(meal, relations(meal.getId()));
+    }
+
+    private record LockedMeal(Setmeal meal, Map<Long, Integer> parts, Map<Long, Dish> dishes) {}
+
+    private Map<Long, Integer> relationMap(List<SetmealDish> relations) {
+        Map<Long, Integer> parts = new TreeMap<>();
+        for (SetmealDish relation : relations) parts.put(relation.getDishId(), relation.getCopies());
+        return parts;
+    }
+
+    /** 初读组成决定锁集合；取得套餐锁和关系锁后校验集合，防止并发组成修改漏锁。 */
+    private LockedMeal lockMeal(Long id, Long newCategory, Set<Long> newDishIds) {
+        Setmeal observed = setmealMapper.selectById(id);
+        if (observed == null) return null;
+        Map<Long, Integer> oldParts = relationMap(relations(id));
+        Set<Long> categories = new TreeSet<>();
+        categories.add(observed.getCategoryId());
+        if (newCategory != null) categories.add(newCategory);
+        Set<Long> dishIds = new TreeSet<>(oldParts.keySet());
+        dishIds.addAll(newDishIds);
+        Map<Long, Dish> dishes = lockIngredients(categories, dishIds);
+        Setmeal meal = setmealMapper.selectOne(new LambdaQueryWrapper<Setmeal>()
+                .eq(Setmeal::getId, id).last("FOR UPDATE"));
+        if (meal == null) return null;
+        Map<Long, Integer> currentParts = relationMap(relationMapper.selectList(
+                new LambdaQueryWrapper<SetmealDish>().eq(SetmealDish::getSetmealId, id)
+                        .orderByAsc(SetmealDish::getDishId).last("FOR UPDATE")));
+        if (!Objects.equals(observed.getCategoryId(), meal.getCategoryId()) || !oldParts.equals(currentParts)) {
+            throw new ConflictException("套餐分类或组成已变化，请刷新重试");
+        }
+        return new LockedMeal(meal, currentParts, dishes);
+    }
+
+    @Override
+    @Transactional
+    public SetmealVO update(SetmealUpdateDTO dto) {
+        permissionService.requireOperationsAccess();
+        Long id = databaseId(dto.getId());
+        BigDecimal price = normalizePrice(dto.getPrice());
+        validateTags(dto.getTags());
+        validateImage(dto.getImage());
+        Map<Long, Integer> parts = compositionMap(dto.getComposition());
+        LockedMeal locked = lockMeal(id, dto.getCategoryId(), parts.keySet());
+        if (locked == null) throw new NotFoundException("套餐不存在");
+        Setmeal meal = locked.meal();
+        validateSale(dto.getCategoryId(), dto.getStatus(), parts, locked.dishes());
+        ensureNameAvailable(dto.getName(), id);
+        String image = dto.getImage() == null ? meal.getImage() : dto.getImage();
+        boolean unchanged = Objects.equals(meal.getName(), dto.getName())
+                && Objects.equals(meal.getCategoryId(), dto.getCategoryId())
+                && meal.getPrice().compareTo(price) == 0
+                && Objects.equals(meal.getDescription(), dto.getDescription())
+                && Objects.equals(meal.getStatus(), dto.getStatus())
+                && readTags(meal.getTags()).equals(dto.getTags())
+                && Objects.equals(meal.getArt(), dto.getArt())
+                && Objects.equals(meal.getImage(), image) && locked.parts().equals(parts);
+        if (unchanged) return toVO(meal, relations(id));
+        // 新审计实体配合字段白名单：库存、创建字段不会进入更新SQL。
+        var wrapper = new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Setmeal>()
+                .eq(Setmeal::getId, id).set(Setmeal::getName, dto.getName())
+                .set(Setmeal::getCategoryId, dto.getCategoryId()).set(Setmeal::getPrice, price)
+                .set(Setmeal::getDescription, dto.getDescription()).set(Setmeal::getStatus, dto.getStatus())
+                .set(Setmeal::getTags, writeTags(dto.getTags())).set(Setmeal::getArt, dto.getArt())
+                .set(Setmeal::getImage, image);
+        try {
+            if (setmealMapper.update(new Setmeal(), wrapper) != 1) throw new IllegalStateException("修改套餐失败");
+        } catch (DuplicateKeyException exception) {
+            ensureNameAvailable(dto.getName(), id);
+            throw exception;
+        }
+        if (!locked.parts().equals(parts)) {
+            relationMapper.delete(new LambdaQueryWrapper<SetmealDish>().eq(SetmealDish::getSetmealId, id));
+            saveComposition(id, parts, locked.dishes());
+        }
+        // 使用当前读取得刚写入的数据，不依赖事务开始时的快照。
+        Setmeal updated = setmealMapper.selectOne(new LambdaQueryWrapper<Setmeal>()
+                .eq(Setmeal::getId, id).last("FOR UPDATE"));
+        return toVO(updated, relations(id));
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long itemId) {
+        permissionService.requireOperationsAccess();
+        Long id = databaseId(itemId);
+        LockedMeal locked = lockMeal(id, null, Set.of());
+        if (locked == null) return;
+        if (locked.meal().getStatus() != 0) throw new ConflictException("请先停售套餐再删除");
+        if (setmealMapper.pendingReference(id) != null) {
+            throw new ConflictException("套餐被未完成订单引用，不能删除");
+        }
+        for (String snapshot : dishMapper.selectPendingInventorySnapshots()) {
+            if (snapshotContainsSetmeal(snapshot, id)) {
+                throw new ConflictException("套餐被未完成订单库存快照引用，不能删除");
+            }
+        }
+        relationMapper.delete(new LambdaQueryWrapper<SetmealDish>().eq(SetmealDish::getSetmealId, id));
+        if (setmealMapper.deleteById(id) != 1) throw new IllegalStateException("删除套餐失败");
+    }
+
     @Override
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public com.sky.result.PageResult<SetmealVO> pageQuery(SetmealPageQueryDTO dto) {
@@ -103,6 +217,33 @@ public class SetmealServiceImpl implements SetmealService {
         }
         saveComposition(meal.getId(), composition, dishes);
         return toVO(meal, relations(meal.getId()));
+    }
+
+    private boolean snapshotContainsSetmeal(String snapshot, Long databaseId) {
+        if (snapshot == null) {
+            throw new IllegalStateException("订单库存快照不能为空");
+        }
+        try {
+            JsonNode root = objectMapper.readTree(snapshot);
+            if (root == null || !root.isArray()) {
+                throw new IllegalStateException("订单库存快照格式错误");
+            }
+            for (JsonNode item : root) {
+                JsonNode kind = item.get("kind");
+                JsonNode id = item.get("id");
+                if (!item.isObject() || kind == null || !kind.isTextual()
+                        || id == null || !id.isIntegralNumber()
+                        || !id.canConvertToLong() || id.longValue() <= 0) {
+                    throw new IllegalStateException("订单库存快照条目错误");
+                }
+                if ("setmeal".equals(kind.textValue()) && id.longValue() == databaseId.longValue()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("订单库存快照JSON格式错误", exception);
+        }
     }
 
     private Map<Long, Integer> compositionMap(List<SetmealCompositionDTO> parts) {

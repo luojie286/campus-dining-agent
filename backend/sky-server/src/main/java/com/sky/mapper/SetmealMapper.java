@@ -14,6 +14,10 @@ public interface SetmealMapper extends BaseMapper<Setmeal> {
             @Param("query") com.sky.dto.SetmealPageQueryDTO query,
             @Param("namePattern") String namePattern);
 
+    @Select("SELECT od.id FROM order_detail od JOIN orders o ON o.id=od.order_id "
+            + "WHERE od.setmeal_id=#{id} AND o.status IN (1,2,3,4,7) LIMIT 1 FOR SHARE")
+    Long pendingReference(@Param("id") Long id);
+
     @Override
     @AutoFill(OperationType.INSERT)
     int insert(Setmeal setmeal);
