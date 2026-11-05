@@ -6,6 +6,7 @@ import type { CartLine, Category, MenuItem, Session, Shop } from '@/domain/types
 export const app = reactive({
   session: readSession() as Session | null,
   shop: null as Shop | null, categories: [] as Category[], menu: [] as MenuItem[], cart: [] as CartLine[],
+  shopLoading: false, shopSaving: false, shopError: '',
   toasts: [] as { id: number; message: string; type: 'success' | 'error' | 'info' }[],
   revision: 0, sessionRevision: 0, loading: false
 })
@@ -18,8 +19,58 @@ export function toast(message: string, type: 'success' | 'error' | 'info' = 'suc
 }
 export function setSession(session: Session | null): void {
   app.session = session; writeSession(session); app.sessionRevision++
-  app.menu = []; app.cart = []; app.categories = []; app.shop = null
+  app.menu = []; app.cart = []; app.categories = []
+  resetShopState()
 }
+function resetShopState(): void {
+  app.shop = null
+  app.shopLoading = false
+  app.shopSaving = false
+  app.shopError = ''
+}
+
+export async function refreshShop(): Promise<void> {
+  if (!app.session || app.shopLoading || app.shopSaving) return
+  const sessionRevision = app.sessionRevision
+  app.shopLoading = true
+  app.shopError = ''
+
+  try {
+    const shop = await api.shop()
+    if (sessionRevision === app.sessionRevision) app.shop = shop
+  } catch (error) {
+    if (sessionRevision !== app.sessionRevision) return
+    app.shop = null
+    app.shopError = error instanceof Error ? error.message : '营业状态加载失败'
+  } finally {
+    if (sessionRevision === app.sessionRevision) app.shopLoading = false
+  }
+}
+
+export async function updateShopStatus(open: boolean): Promise<void> {
+  if (app.session?.role !== 'admin' || app.shopLoading || app.shopSaving) {
+    throw new Error('当前无法设置营业状态，请稍后重试')
+  }
+
+  const sessionRevision = app.sessionRevision
+  app.shopSaving = true
+  app.shopError = ''
+
+  try {
+    const shop = await api.setShop(open)
+    if (sessionRevision === app.sessionRevision) app.shop = shop
+  } catch (error) {
+    if (sessionRevision === app.sessionRevision) {
+      // 请求失败时服务端可能已完成写入，重新查询才能确认当前状态。
+      app.shop = null
+      app.shopError = '营业状态更新失败，请重新读取当前状态'
+    }
+    throw error
+  } finally {
+    if (sessionRevision === app.sessionRevision) app.shopSaving = false
+  }
+}
+
 export async function refreshBase(): Promise<void> {
   const owner = app.session
   if (!owner) return
@@ -30,9 +81,15 @@ export async function refreshBase(): Promise<void> {
     for (let page = 2; page <= Math.ceil(first.total / 100); page++) records.push(...(await api.menu(undefined, { page, pageSize: 100 })).records)
     return [...new Map(records.map(item => [item.id, item])).values()]
   }
-  const [shop, categories, menu, cart] = await Promise.all([api.shop(), api.categories(), catalog(), owner.role === 'user' ? api.cart() : Promise.resolve([])])
+  // 店铺查询独立写回状态，菜单或购物车失败时仍可显示营业信息。
+  const [, categories, menu, cart] = await Promise.all([
+    refreshShop(),
+    api.categories(),
+    catalog(),
+    owner.role === 'user' ? api.cart() : Promise.resolve([])
+  ])
   if (owner !== app.session) return
-  app.shop = shop; app.categories = categories; app.menu = menu; app.cart = cart
+  app.categories = categories; app.menu = menu; app.cart = cart
   app.revision++
 }
 // 分类维护只同步分类缓存，不依赖店铺、商品或购物车接口。
@@ -64,5 +121,9 @@ export async function safely(action: () => Promise<void>, message?: string): Pro
 window.addEventListener('session-expired', () => { setSession(null) })
 window.addEventListener('demo-order-updated', () => { app.revision++ })
 window.addEventListener('storage', event => {
-  if (event.key === `campus-session-${API_MODE}-v1`) { app.session = readSession(); app.sessionRevision++ }
+  if (event.key === `campus-session-${API_MODE}-v1`) {
+    app.session = readSession()
+    app.sessionRevision++
+    resetShopState()
+  }
 })

@@ -32,6 +32,6 @@ public class JwtWebMvcConfiguration implements WebMvcConfigurer {
                 .excludePathPatterns("/api/admin/employee/login");
 
         registry.addInterceptor(userInterceptor)
-                .addPathPatterns("/api/user/category/**");
+                .addPathPatterns("/api/user/category/**", "/api/user/shop");
     }
 }

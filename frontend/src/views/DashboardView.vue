@@ -1,26 +1,44 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
-import { app, safely } from '@/stores/app'
+import { app, refreshShop, safely, updateShopStatus } from '@/stores/app'
 import { money, dateTime, localDate, statusLabels, statusColors, type Dashboard, type Order } from '@/domain/types'
 import Icon from '@/components/Icon.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
-const router = useRouter(); const metrics = ref<Dashboard | null>(null); const orders = ref<Order[]>([]); const loading = ref(true); const error = ref(''); const shopBusy = ref(false)
+const router = useRouter(); const metrics = ref<Dashboard | null>(null); const orders = ref<Order[]>([]); const loading = ref(true); const error = ref('')
 async function load() {
   error.value = ''
   try { const [m, o] = await Promise.all([api.metrics(), api.orders({ pageSize: 5, begin: localDate(), end: localDate() })]); metrics.value = m; orders.value = o.records }
   catch (e) { error.value = e instanceof Error ? e.message : '加载失败' }
   finally { loading.value = false }
 }
-async function toggleShop() { shopBusy.value = true; await safely(async () => { app.shop = await api.setShop(!app.shop?.open) }, '营业状态已更新'); shopBusy.value = false }
+const shopStatusText = computed(() => {
+  if (app.shopSaving) return '正在更新营业状态…'
+  if (app.shopLoading) return '正在读取营业状态…'
+  if (!app.shop) return '营业状态未知'
+  return app.shop.open ? '食堂营业中' : '食堂休息中'
+})
+
+async function toggleShop(): Promise<void> {
+  if (!app.shop || app.shopLoading || app.shopSaving) return
+  const targetOpen = !app.shop.open
+  await safely(() => updateShopStatus(targetOpen), '营业状态已更新')
+}
 watch(() => app.revision, () => { void load() })
-onMounted(load)
+onMounted(() => {
+  void refreshShop()
+  void load()
+})
 </script>
 <template>
-  <div class="welcome-banner"><div><h2>{{ app.session?.name }}，今天也辛苦了。</h2><p>从一份午餐开始，把园区的每一天照顾好。</p></div><Icon class="banner-mark" name="sprout" :size="105"/><button class="banner-status" :disabled="shopBusy || !app.shop" @click="toggleShop"><span class="dot" :style="{ background: app.shop?.open ? '#73985d' : '#b0b39f' }"></span>{{ app.shop?.open ? '食堂营业中' : '食堂休息中' }}<Icon name="down" :size="13"/></button></div>
+  <div class="welcome-banner"><div><h2>{{ app.session?.name }}，今天也辛苦了。</h2><p>从一份午餐开始，把园区的每一天照顾好。</p></div><Icon class="banner-mark" name="sprout" :size="105"/><button class="banner-status" :disabled="app.shopLoading || app.shopSaving || !app.shop" @click="toggleShop"><span class="dot" :style="{ background: app.shop?.open ? '#73985d' : '#b0b39f' }"></span>{{ shopStatusText }}<Icon name="down" :size="13"/></button></div>
+  <div v-if="app.shopError" class="inline-error" role="alert">
+    {{ app.shopError }}
+    <button class="btn text" @click="refreshShop">重试营业状态</button>
+  </div>
   <div v-if="error" class="inline-error"><Icon name="error" :size="17"/><span>{{ error }}</span><button class="btn text" @click="load">重试</button></div>
   <div v-if="loading" class="loading-state"><Icon class="spin" name="loading"/>正在准备工作台…</div>
   <template v-if="metrics">
