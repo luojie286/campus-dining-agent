@@ -1,0 +1,140 @@
+<view class="canteen-page">
+  <view class="store-hero">
+    <view class="hero-orbit orbit-outer"></view>
+    <view class="hero-orbit orbit-inner"></view>
+    <image class="hero-meal" mode="aspectFill" src="/assets/food/chicken.png" />
+    <view class="store-copy">
+      <text class="store-label">园味 · 园区点餐</text>
+      <view class="store-title-row">
+        <text class="store-title">{{shop ? shop.name : '园味食堂'}}</text>
+        <view wx:if="{{shop}}" class="store-status {{shop.open ? 'status-open' : 'status-closed'}}">
+          <view class="status-dot"></view>
+          <text>{{shop.open ? '营业中' : '已打烊'}}</text>
+        </view>
+      </view>
+      <text wx:if="{{shop}}" class="store-hours">营业时间 {{shop.openingHours}}</text>
+      <text wx:if="{{shop}}" class="store-location">{{shop.pickupPoint}}</text>
+      <text wx:else class="store-hours">{{error ? '暂未读取到营业信息' : '正在读取营业信息…'}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{shop && !shop.open}}" class="closed-notice">
+    <text class="notice-dot">!</text><text>食堂休息中，仍可浏览菜单。</text>
+  </view>
+
+  <view class="menu-panel">
+    <view class="menu-toolbar">
+      <view class="menu-heading"><view class="heading-mark"></view><text>店内点餐</text></view>
+      <picker class="scene-control" mode="selector" range="{{scenes}}" range-key="label" value="{{sceneIndex}}" bindchange="changeScene">
+        <view class="scene-picker"><text>演示 · {{scenes[sceneIndex].label}}</text><view class="chevron"></view></view>
+      </picker>
+    </view>
+
+    <view class="menu-columns">
+      <view class="category-rail">
+        <scroll-view class="category-scroll" scroll-y aria-label="菜单分类">
+          <view class="category-items">
+            <view wx:for="{{categories}}" wx:key="id"
+              class="category-button {{categoryId === item.id ? 'category-active' : ''}}"
+              aria-role="button" hover-class="category-hover"
+              bindtap="selectCategory" data-id="{{item.id}}">
+              <text class="category-label">{{item.name}}</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <scroll-view class="product-list" scroll-y scroll-with-animation="{{false}}"
+        scroll-into-view="{{scrollTarget}}" lower-threshold="80" bindscrolltolower="loadMore"
+        refresher-enabled refresher-triggered="{{refreshing}}" bindrefresherrefresh="refresh">
+        <view id="menu-top" class="list-anchor"></view>
+        <view class="product-list-heading">
+          <text class="category-title">{{categoryName}}</text>
+          <text wx:if="{{!loading && !error}}" class="category-count">{{total}} 项商品</text>
+        </view>
+
+        <view wx:if="{{loading}}" class="list-state">
+          <view class="state-icon state-loading">···</view>
+          <text class="state-title">正在加载菜单</text>
+          <text class="state-description">马上就好</text>
+        </view>
+        <view wx:elif="{{error && !products.length}}" class="list-state">
+          <view class="state-icon state-error">!</view>
+          <text class="state-title">菜单暂时无法加载</text>
+          <text class="state-description">{{error}}</text>
+          <button class="retry-button" bindtap="retry">重新加载</button>
+        </view>
+        <view wx:elif="{{!products.length}}" class="list-state">
+          <view class="state-icon state-empty">–</view>
+          <text class="state-title">暂无商品</text>
+          <text class="state-description">可以换个分类看看，或稍后刷新。</text>
+        </view>
+
+        <view wx:else class="product-items">
+          <view wx:for="{{products}}" wx:key="id" class="dish-card {{item.soldOut ? 'dish-sold-out' : ''}}"
+            hover-class="dish-pressed" bindtap="openDish" data-id="{{item.id}}">
+            <view class="dish-image-wrap">
+              <image class="dish-image" mode="aspectFill" src="{{item.imageSrc}}"
+                lazy-load binderror="imageFailed" data-id="{{item.id}}" />
+              <text wx:if="{{item.soldOut}}" class="sold-out-overlay">售罄</text>
+            </view>
+            <view class="dish-copy">
+              <view class="dish-name-row">
+                <text class="dish-name">{{item.name}}</text>
+                <text wx:if="{{item.kind === 'setmeal'}}" class="setmeal-tag">套餐</text>
+              </view>
+              <text class="dish-description">{{item.description}}</text>
+              <view class="dish-tags">
+                <text class="dish-tag" wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this">{{tag}}</text>
+              </view>
+              <view class="dish-bottom">
+                <view class="dish-price"><text class="yuan">¥</text>{{item.priceText}}</view>
+                <text class="dish-detail-link">详情 ›</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="list-end">
+            <text wx:if="{{loadingMore}}" class="list-note">正在加载更多…</text>
+            <view wx:elif="{{error}}" class="append-error">
+              <text class="list-note">{{error}}</text>
+              <button class="retry-button" bindtap="retry">重试</button>
+            </view>
+            <button wx:elif="{{hasMore}}" class="more-button" bindtap="loadMore">加载更多</button>
+            <text wx:else class="list-note">已显示全部商品</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view wx:if="{{detail}}" class="detail-overlay">
+    <view class="detail-backdrop" bindtap="closeDish"></view>
+    <view class="detail-sheet">
+      <view class="detail-heading">
+        <view>
+          <text class="detail-eyebrow">{{detail.kind === 'setmeal' ? '套餐详情' : '菜品详情'}}</text>
+          <text class="detail-name">{{detail.name}}</text>
+        </view>
+        <button class="detail-close" aria-label="关闭详情" bindtap="closeDish">×</button>
+      </view>
+      <scroll-view class="detail-content {{detail.kind === 'setmeal' ? 'detail-with-composition' : ''}}" scroll-y>
+        <image class="detail-image" mode="aspectFill" src="{{detail.imageSrc}}" binderror="imageFailed" data-id="{{detail.id}}" />
+        <text class="detail-description">{{detail.description}}</text>
+        <view class="dish-tags">
+          <text class="dish-tag" wx:for="{{detail.tags}}" wx:key="*this">{{item}}</text>
+        </view>
+        <view wx:if="{{detail.kind === 'setmeal'}}" class="setmeal-composition">
+          <text class="composition-heading">套餐包含</text>
+          <view wx:for="{{detail.compositionItems}}" wx:key="dishId" class="composition-row">
+            <text>{{item.name}}</text><text>× {{item.quantity}}</text>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="detail-footer">
+        <view class="dish-price"><text class="yuan">¥</text>{{detail.priceText}}</view>
+        <text class="detail-stock {{detail.soldOut ? 'stock-empty' : ''}}">{{detail.soldOut ? '今日售罄' : detail.availableStock + ' 份可售'}}</text>
+      </view>
+    </view>
+  </view>
+</view>

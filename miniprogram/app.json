@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/menu/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "园味 · 园区点餐",
+    "navigationBarBackgroundColor": "#e8f6ff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f3f8fd"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

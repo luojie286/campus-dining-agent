@@ -4,6 +4,11 @@ export const API_MODE: 'mock' | 'api' = import.meta.env.VITE_API_MODE === 'api' 
 export const SESSION_KEY = `campus-session-${API_MODE}-v1`
 const base = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '')
 
+export function productImageUrl(url: string): string {
+  if (url.startsWith('/api/media/product-images/')) return base + url.slice('/api'.length)
+  return url
+}
+
 export function readSession(): Session | null {
   try {
     const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') as Session | null
@@ -19,12 +24,15 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, q
   const params = new URLSearchParams()
   Object.entries(query || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') params.set(k, String(v)) })
   const session = readSession()
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const isMultipart = body instanceof FormData
+  const headers: Record<string, string> = {}
+  // 浏览器会为 FormData 自动生成带 boundary 的 Content-Type。
+  if (!isMultipart) headers['Content-Type'] = 'application/json'
   if (session) headers.token = session.token
   let response: Response
   try {
     response = await fetch(`${base}${path}${params.size ? '?' + params : ''}`, {
-      method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000)
+      method, headers, body: isMultipart ? body : body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000)
     })
   } catch { throw new Error('无法连接后端，请检查 8080 服务与代理配置。真实接口模式不会回退为演示数据。') }
   if (response.status === 401) {

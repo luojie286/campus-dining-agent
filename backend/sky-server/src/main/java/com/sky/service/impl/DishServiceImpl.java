@@ -23,6 +23,7 @@ import com.sky.mapper.CategoryMapper;
 import com.sky.mapper.DishMapper;
 import com.sky.service.DishService;
 import com.sky.service.EmployeePermissionService;
+import com.sky.service.ProductImageStorage;
 import com.sky.vo.DishVO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -276,12 +277,14 @@ public class DishServiceImpl implements DishService {
     private final EmployeePermissionService permissionService;
     private final ObjectMapper objectMapper;
     private final Set<String> allowedImageHosts;
+    private final ProductImageStorage imageStorage;
 
     public DishServiceImpl(
             DishMapper dishMapper,
             CategoryMapper categoryMapper,
             EmployeePermissionService permissionService,
             ObjectMapper objectMapper,
+            ProductImageStorage imageStorage,
             @Value("${sky.dish.allowed-image-hosts:}")
             String imageHosts) {
 
@@ -289,6 +292,7 @@ public class DishServiceImpl implements DishService {
         this.categoryMapper = categoryMapper;
         this.permissionService = permissionService;
         this.objectMapper = objectMapper;
+        this.imageStorage = imageStorage;
 
         this.allowedImageHosts = new HashSet<>();
 
@@ -429,7 +433,7 @@ public class DishServiceImpl implements DishService {
     }
 
     /**
-     * 本示例先支持受控HTTPS图片域名。
+     * 支持本服务已上传的图片和受控HTTPS图片地址。
      * 未配置时允许不传图片，但不能接受任意外部地址。
      */
     private void validateImage(String image) {
@@ -439,6 +443,14 @@ public class DishServiceImpl implements DishService {
 
         if (image.isBlank()) {
             throw new BadRequestException("没有图片时请省略image字段");
+        }
+
+        if (image.startsWith(ProductImageStorage.PUBLIC_PATH)) {
+            String filename = image.substring(ProductImageStorage.PUBLIC_PATH.length());
+            if (!imageStorage.contains(filename)) {
+                throw new BadRequestException("上传的菜品图片不存在，请重新选择");
+            }
+            return;
         }
 
         URI uri;

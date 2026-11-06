@@ -1,8 +1,8 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ kind?: string }>(), { kind: 'chicken' })
+withDefaults(defineProps<{ kind?: string; crop?: boolean }>(), { kind: 'chicken' })
 </script>
 <template>
-  <svg viewBox="0 0 280 200" class="food-art" role="img" :aria-label="`${kind} 菜品示意插画`">
+  <svg viewBox="0 0 280 200" :preserveAspectRatio="crop ? 'xMidYMid slice' : 'xMidYMid meet'" class="food-art" role="img" :aria-label="`${kind} 菜品示意插画`">
     <rect width="280" height="200" :fill="kind === 'salad' ? '#e9eedf' : kind === 'fish' ? '#e7edeb' : '#f0e7d8'" />
     <path d="M235 0v200M250 0v200" stroke="#fff" stroke-width="1" opacity=".5" />
     <ellipse cx="141" cy="109" rx="96" ry="68" fill="#c8b99e" opacity=".2" />

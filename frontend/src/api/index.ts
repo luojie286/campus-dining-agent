@@ -26,6 +26,32 @@ async function saveMenu(item: MenuItem): Promise<MenuItem> {
     () => request<MenuItem>(`/admin/${kind}`, id ? 'PUT' : 'POST', body))
 }
 
+async function uploadDishImage(file: File): Promise<string> {
+  if (API_MODE === 'mock') {
+    // 演示数据保存在浏览器内，缩小照片以免很快占满本地存储。
+    const image = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, 900 / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('当前浏览器无法保存演示图片')
+      context.fillStyle = '#fff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/jpeg', 0.8)
+    } finally {
+      image.close()
+    }
+  }
+
+  const body = new FormData()
+  body.append('file', file)
+  const result = await request<{ url: string }>('/admin/common/upload', 'POST', body)
+  return result.url
+}
+
 export const api = {
   login: (role: Role, username: string, password: string) => select(() => mock.login(role, username, password), () => request<Session>(role === 'admin' ? '/admin/employee/login' : '/user/login', 'POST', { username, password })),
   shop: () => select(mock.shop, () => request<Shop>(`${rolePath()}/shop`)),
@@ -33,6 +59,7 @@ export const api = {
   menu: (kind?: 'dish' | 'setmeal', query: ListQuery = {}) => select(() => mock.menu(kind, query), () => request<Page<MenuItem>>(`${rolePath()}/${kind || 'menu'}/page`, 'GET', undefined, { ...query })),
   menuItem,
   saveMenu,
+  uploadDishImage,
   setMenuStatus: async (item: MenuItem, status: MenuItem['status']): Promise<MenuItem> => {
     if (item.kind === 'setmeal') {
       return select(async () => mock.saveMenu({ ...await mock.menuItem('setmeal', item.id), status }),

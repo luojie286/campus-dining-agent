@@ -21,6 +21,7 @@ application-private.yml
 /PLAN/
 /temp/
 /PROJECT_BRIEF.md
+/miniprogram/README.md
 
 # Local environment settings (keep example and production templates)
 .env
@@ -43,3 +44,5 @@ Desktop.ini
 # Personal password generation utility
 /backend/sky-server/src/test/java/com/sky/PasswordGenerator.java
 
+# Local WeChat DevTools settings
+/miniprogram/project.private.config.json

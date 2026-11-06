@@ -2,6 +2,10 @@ server:
   address: 127.0.0.1
   port: ${SERVER_PORT:8080}
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   application:
     name: campus-dining
   profiles:
@@ -21,6 +25,7 @@ logging:
     com.sky: info
 sky:
   dish:
+    image-directory: ${DISH_IMAGE_DIRECTORY:.runtime/product-images}
     # 未配置时允许无图新增，但拒绝外部图片地址；多个受控域名用逗号分隔。
     allowed-image-hosts: ${DISH_IMAGE_HOSTS:}
   jwt:

@@ -1,0 +1,6 @@
+{
+  "disableScroll": true,
+  "usingComponents": {
+    "canteen-menu": "/components/canteen-menu/index"
+  }
+}

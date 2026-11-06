@@ -70,3 +70,20 @@ it('套餐启停只提交目标状态，避免回写旧资料', async () => {
   expect(fetch).toHaveBeenCalledTimes(1)
   expect(fetch).toHaveBeenCalledWith('/api/admin/setmeal/3/status', expect.objectContaining({ method: 'PUT', body: '{"status":1}' }))
 })
+
+it('菜品照片使用 multipart 上传，并将返回地址提交给菜品保存接口', async () => {
+  const { api } = await import('./index')
+  const url = '/api/media/product-images/0123456789abcdef0123456789abcdef.png'
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: 1, data: { url } })))
+  const file = new File(['fixture'], 'photo.png', { type: 'image/png' })
+  const image = await api.uploadDishImage(file)
+  expect(image).toBe(url)
+  const [uploadPath, upload] = vi.mocked(fetch).mock.calls[0]!
+  expect(uploadPath).toBe('/api/admin/common/upload')
+  expect(upload?.headers).not.toHaveProperty('Content-Type')
+  expect((upload?.body as FormData).get('file')).toEqual(file)
+
+  await api.saveMenu({ ...item, id: 0, image })
+  expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe('/api/admin/dish')
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).image).toBe(url)
+})
