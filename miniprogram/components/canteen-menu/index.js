@@ -1,4 +1,5 @@
 const { createMenuSource, scenes } = require('../../services/menu')
+const config = require('../../services/config')
 
 const PAGE_SIZE = 6
 const ALL_CATEGORY = { id: 0, name: '全部商品' }
@@ -33,7 +34,8 @@ Component({
     detail: null,
     scrollTarget: '',
     scenes,
-    sceneIndex: 0
+    sceneIndex: 0,
+    isDemo: config.mode === 'mock'
   },
 
   lifetimes: {
@@ -152,6 +154,7 @@ Component({
     },
 
     changeScene(event) {
+      if (!this.data.isDemo) return
       const sceneIndex = Number(event.detail.value)
       if (!scenes[sceneIndex] || sceneIndex === this.data.sceneIndex) return
       this.source = createMenuSource(scenes[sceneIndex].value)

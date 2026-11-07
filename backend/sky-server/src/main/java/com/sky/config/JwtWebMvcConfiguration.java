@@ -8,8 +8,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * JWT鉴权需要查询账户当前状态，必须与数据库业务组件一起加载。
- * bootstrap不注册业务Controller，也不创建这组数据库鉴权拦截器。
+ * JWT 鉴权需要查询账户当前状态，因此随数据库业务组件一起加载。
  */
 @Configuration
 @Profile("!bootstrap")
@@ -32,6 +31,10 @@ public class JwtWebMvcConfiguration implements WebMvcConfigurer {
                 .excludePathPatterns("/api/admin/employee/login");
 
         registry.addInterceptor(userInterceptor)
-                .addPathPatterns("/api/user/category/**", "/api/user/shop");
+                .addPathPatterns(
+                        "/api/user/category/**",
+                        "/api/user/shop",
+                        "/api/user/menu/page"
+                );
     }
 }

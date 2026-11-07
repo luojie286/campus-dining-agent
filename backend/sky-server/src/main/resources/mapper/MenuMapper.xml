@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.MenuMapper">
+
+    <select id="selectMenuPage" resultType="com.sky.dto.MenuRow">
+        SELECT menu.raw_id, menu.item_id, menu.kind, menu.category_id,
+        menu.name, menu.price, menu.description, menu.status,
+        menu.stock, menu.tags, menu.art, menu.image
+        FROM (
+        SELECT d.id AS raw_id, d.id * 2 AS item_id,
+        'dish' AS kind, d.category_id, c.sort AS category_sort,
+        d.name, d.price, d.description, d.status,
+        d.stock, d.tags, d.art, d.image
+        FROM dish d
+        JOIN category c ON c.id = d.category_id
+        WHERE d.status = 1 AND c.status = 1 AND c.type = 1
+
+        UNION ALL
+
+        SELECT s.id AS raw_id, s.id * 2 + 1 AS item_id,
+        'setmeal' AS kind, s.category_id, c.sort AS category_sort,
+        s.name, s.price, s.description, s.status,
+        s.stock, s.tags, s.art, s.image
+        FROM setmeal s
+        JOIN category c ON c.id = s.category_id
+        WHERE s.status = 1 AND c.status = 1 AND c.type = 2
+        ) menu
+        <where>
+            <if test="query.categoryId != null">
+                AND menu.category_id = #{query.categoryId}
+            </if>
+            <if test="query.status != null">
+                AND menu.status = #{query.status}
+            </if>
+            <if test="namePattern != null">
+                AND menu.name LIKE #{namePattern} ESCAPE '!'
+            </if>
+        </where>
+        ORDER BY menu.category_sort, menu.category_id, menu.item_id
+    </select>
+
+    <select id="selectSetmealParts" resultType="com.sky.dto.MenuPartRow">
+        SELECT sd.setmeal_id, sd.dish_id, sd.copies,
+        COALESCE(d.name, sd.name) AS dish_name,
+        d.stock AS dish_stock,
+        d.status AS dish_status,
+        c.status AS dish_category_status,
+        c.type AS dish_category_type
+        FROM setmeal_dish sd
+        LEFT JOIN dish d ON d.id = sd.dish_id
+        LEFT JOIN category c ON c.id = d.category_id
+        WHERE sd.setmeal_id IN
+        <foreach collection="setmealIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY sd.setmeal_id, sd.dish_id
+    </select>
+
+</mapper>

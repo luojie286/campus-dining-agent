@@ -25,7 +25,7 @@
   <view class="menu-panel">
     <view class="menu-toolbar">
       <view class="menu-heading"><view class="heading-mark"></view><text>店内点餐</text></view>
-      <picker class="scene-control" mode="selector" range="{{scenes}}" range-key="label" value="{{sceneIndex}}" bindchange="changeScene">
+      <picker wx:if="{{isDemo}}" class="scene-control" mode="selector" range="{{scenes}}" range-key="label" value="{{sceneIndex}}" bindchange="changeScene">
         <view class="scene-picker"><text>演示 · {{scenes[sceneIndex].label}}</text><view class="chevron"></view></view>
       </picker>
     </view>

@@ -31,3 +31,6 @@ sky:
   jwt:
     secret-key: ${JWT_SECRET_KEY:campus-dining-local-development-secret-key-change-me}
     ttl: ${JWT_TTL:2h}
+  wechat:
+    app-id: ${WECHAT_APP_ID:}
+    app-secret: ${WECHAT_APP_SECRET:}
