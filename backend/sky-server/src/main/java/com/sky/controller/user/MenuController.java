@@ -3,7 +3,7 @@ package com.sky.controller.user;
 import com.sky.dto.DishPageQueryDTO;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
-import com.sky.service.MenuService;
+import com.sky.service.UserMenuCacheService;
 import com.sky.vo.MenuItemVO;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
@@ -17,15 +17,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/user/menu")
 public class MenuController {
 
-    private final MenuService menuService;
+    private final UserMenuCacheService menuCacheService;
 
-    public MenuController(MenuService menuService) {
-        this.menuService = menuService;
+    public MenuController(UserMenuCacheService menuCacheService) {
+        this.menuCacheService = menuCacheService;
     }
 
     @GetMapping("/page")
     public Result<PageResult<MenuItemVO>> page(
             @Valid @ModelAttribute DishPageQueryDTO query) {
-        return Result.success(menuService.pageForUser(query));
+
+        return Result.success(menuCacheService.pageForUser(query));
     }
 }

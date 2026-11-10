@@ -34,3 +34,5 @@ sky:
   wechat:
     app-id: ${WECHAT_APP_ID:}
     app-secret: ${WECHAT_APP_SECRET:}
+  menu-cache:
+    prefix: ${MENU_CACHE_PREFIX:campus:local:menu:catalog:v1}

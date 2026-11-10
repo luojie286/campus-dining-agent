@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sky.cache.MenuPageCache;
 import com.sky.dto.*;
 import com.sky.entity.*;
 import com.sky.exception.*;
@@ -31,6 +32,7 @@ public class SetmealServiceImpl implements SetmealService {
     private final SetmealDishMapper relationMapper;
     private final DishMapper dishMapper;
     private final CategoryMapper categoryMapper;
+    private final MenuPageCache menuPageCache;
     private final EmployeePermissionService permissionService;
     private final ObjectMapper objectMapper;
     private final Set<String> allowedImageHosts = new HashSet<>();
@@ -38,11 +40,13 @@ public class SetmealServiceImpl implements SetmealService {
     public SetmealServiceImpl(SetmealMapper setmealMapper, SetmealDishMapper relationMapper,
             DishMapper dishMapper, CategoryMapper categoryMapper,
             EmployeePermissionService permissionService, ObjectMapper objectMapper,
+            MenuPageCache menuPageCache,
             @Value("${sky.dish.allowed-image-hosts:}") String imageHosts) {
         this.setmealMapper = setmealMapper;
         this.relationMapper = relationMapper;
         this.dishMapper = dishMapper;
         this.categoryMapper = categoryMapper;
+        this.menuPageCache = menuPageCache;
         this.permissionService = permissionService;
         this.objectMapper = objectMapper;
         for (String host : imageHosts.split(",")) {
@@ -65,6 +69,7 @@ public class SetmealServiceImpl implements SetmealService {
                 .eq(Setmeal::getId, id).set(Setmeal::getStatus, status);
         if (setmealMapper.update(new Setmeal(), wrapper) != 1) throw new IllegalStateException("修改套餐状态失败");
         meal.setStatus(status);
+        menuPageCache.invalidateAfterCommit();
         return toVO(meal, relations(id));
     }
 
@@ -159,6 +164,7 @@ public class SetmealServiceImpl implements SetmealService {
         // 使用当前读取得刚写入的数据，不依赖事务开始时的快照。
         Setmeal updated = setmealMapper.selectOne(new LambdaQueryWrapper<Setmeal>()
                 .eq(Setmeal::getId, id).last("FOR UPDATE"));
+        menuPageCache.invalidateAfterCommit();
         return toVO(updated, relations(id));
     }
 
@@ -180,6 +186,7 @@ public class SetmealServiceImpl implements SetmealService {
         }
         relationMapper.delete(new LambdaQueryWrapper<SetmealDish>().eq(SetmealDish::getSetmealId, id));
         if (setmealMapper.deleteById(id) != 1) throw new IllegalStateException("删除套餐失败");
+        menuPageCache.invalidateAfterCommit();
     }
 
     @Override
@@ -238,6 +245,7 @@ public class SetmealServiceImpl implements SetmealService {
             throw exception;
         }
         saveComposition(meal.getId(), composition, dishes);
+        menuPageCache.invalidateAfterCommit();
         return toVO(meal, relations(meal.getId()));
     }
 

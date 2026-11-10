@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Profile;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sky.cache.MenuPageCache;
 import com.sky.dto.CategoryPageQueryDTO;
 import com.sky.dto.CategorySaveDTO;
 import com.sky.dto.CategoryStatusUpdateDTO;
@@ -29,12 +30,15 @@ import java.util.Objects;
 public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryMapper categoryMapper;
+    private final MenuPageCache menuPageCache;
     private final EmployeePermissionService permissionService;
 
     public CategoryServiceImpl(
             CategoryMapper categoryMapper,
-            EmployeePermissionService permissionService) {
+            EmployeePermissionService permissionService,
+            MenuPageCache menuPageCache) {
         this.categoryMapper = categoryMapper;
+        this.menuPageCache = menuPageCache;
         this.permissionService = permissionService;
     }
 
@@ -65,6 +69,7 @@ public class CategoryServiceImpl implements CategoryService {
             throw new ConflictException("分类名称已存在");
         }
 
+        menuPageCache.invalidateAfterCommit();
         return toVO(category);
     }
 
@@ -121,6 +126,7 @@ public class CategoryServiceImpl implements CategoryService {
         target.setSort(dto.getSort());
         target.setStatus(dto.getStatus());
 
+        menuPageCache.invalidateAfterCommit();
         return toVO(target);
     }
 
@@ -142,6 +148,7 @@ public class CategoryServiceImpl implements CategoryService {
         if (rows != 1) {
             throw new IllegalStateException("删除分类失败");
         }
+        menuPageCache.invalidateAfterCommit();
     }
 
     @Override
@@ -172,6 +179,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         target.setStatus(dto.getStatus());
 
+        menuPageCache.invalidateAfterCommit();
         return toVO(target);
     }
 

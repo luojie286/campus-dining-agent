@@ -30,7 +30,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.sky.cache.MenuPageCache;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
@@ -44,6 +44,7 @@ import java.util.Set;
 public class DishServiceImpl implements DishService {
 
     private static final long MAX_PUBLIC_ID = 9007199254740991L;
+    private final MenuPageCache menuPageCache;
 
     @Override
     public DishVO getById(Long itemId) {
@@ -158,6 +159,7 @@ public class DishServiceImpl implements DishService {
         target.setTags(tagsJson);
         target.setArt(dto.getArt());
         target.setImage(image);
+        menuPageCache.invalidateAfterCommit();
         return toVO(target, dto.getTags());
     }
 
@@ -197,6 +199,7 @@ public class DishServiceImpl implements DishService {
         if (dishMapper.deleteById(databaseId) != 1) {
             throw new IllegalStateException("删除菜品失败");
         }
+        menuPageCache.invalidateAfterCommit();
     }
 
     private boolean snapshotContainsDish(String snapshot, Long databaseId) {
@@ -285,22 +288,23 @@ public class DishServiceImpl implements DishService {
             EmployeePermissionService permissionService,
             ObjectMapper objectMapper,
             ProductImageStorage imageStorage,
-            @Value("${sky.dish.allowed-image-hosts:}")
-            String imageHosts) {
+            @Value("${sky.dish.allowed-image-hosts:}") String imageHosts,
+            // 在构造器参数列表中增加
+            MenuPageCache menuPageCache) {
 
         this.dishMapper = dishMapper;
         this.categoryMapper = categoryMapper;
         this.permissionService = permissionService;
         this.objectMapper = objectMapper;
         this.imageStorage = imageStorage;
-
+        // 在构造器内部增加
+        this.menuPageCache = menuPageCache;
         this.allowedImageHosts = new HashSet<>();
 
         for (String host : imageHosts.split(",")) {
             if (!host.isBlank()) {
                 this.allowedImageHosts.add(
-                        host.trim().toLowerCase(java.util.Locale.ROOT)
-                );
+                        host.trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
     }
@@ -322,8 +326,7 @@ public class DishServiceImpl implements DishService {
         Category category = categoryMapper.selectOne(
                 new LambdaQueryWrapper<Category>()
                         .eq(Category::getId, dto.getCategoryId())
-                        .last("FOR UPDATE")
-        );
+                        .last("FOR UPDATE"));
 
         if (category == null) {
             throw new NotFoundException("分类不存在");
@@ -372,8 +375,7 @@ public class DishServiceImpl implements DishService {
                     new LambdaQueryWrapper<Dish>()
                             .select(Dish::getId)
                             .eq(Dish::getName, dto.getName())
-                            .last("FOR UPDATE")
-            );
+                            .last("FOR UPDATE"));
             if (duplicate != null) {
                 throw new ConflictException("菜品名称已存在");
             }
@@ -381,6 +383,7 @@ public class DishServiceImpl implements DishService {
             throw exception;
         }
 
+        menuPageCache.invalidateAfterCommit();
         return toVO(dish, dto.getTags());
     }
 
@@ -418,8 +421,7 @@ public class DishServiceImpl implements DishService {
     private boolean nameExists(String name) {
         Long count = dishMapper.selectCount(
                 new LambdaQueryWrapper<Dish>()
-                        .eq(Dish::getName, name)
-        );
+                        .eq(Dish::getName, name));
 
         return count != null && count > 0;
     }

@@ -84,7 +84,7 @@ class AuditServiceTest {
         when(mapper.selectCount(any(Wrapper.class))).thenReturn(0L);
         when(mapper.update(any(Category.class), any(Wrapper.class))).thenReturn(1);
         CategoryServiceImpl service = new CategoryServiceImpl(mapper,
-                mock(EmployeePermissionService.class));
+                mock(EmployeePermissionService.class), mock(com.sky.cache.MenuPageCache.class));
 
         CategorySaveDTO dto = new CategorySaveDTO();
         dto.setId(20L);

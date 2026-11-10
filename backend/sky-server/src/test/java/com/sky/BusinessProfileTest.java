@@ -1,6 +1,7 @@
 package com.sky;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sky.cache.MenuPageCache;
 import com.sky.config.JwtWebMvcConfiguration;
 import com.sky.config.WebMvcConfiguration;
 import com.sky.controller.admin.EmployeeController;
@@ -70,6 +71,7 @@ class BusinessProfileTest {
             UserServiceImpl.class, EmployeePermissionService.class})
     static class BusinessConfiguration {
         @Bean EmployeeMapper employeeMapper() { return mock(EmployeeMapper.class); }
+        @Bean MenuPageCache menuPageCache() { return mock(MenuPageCache.class); }
         @Bean CategoryMapper categoryMapper() { return mock(CategoryMapper.class); }
         @Bean UserMapper userMapper() { return mock(UserMapper.class); }
         @Bean JwtUtil jwtUtil() { return mock(JwtUtil.class); }
