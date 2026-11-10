@@ -30,8 +30,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -151,23 +149,7 @@ public class UserOrderService {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PageResult<OrderVO> page(OrderPageQueryDTO query) {
-        LocalDate begin = parseDate(query.getBegin());
-        LocalDate end = parseDate(query.getEnd());
-        if (begin != null && end != null && begin.isAfter(end)) {
-            throw new BadRequestException("开始日期不能晚于结束日期");
-        }
-        return orders.pageOwned(users.currentUserId(), query, begin, end);
-    }
-
-    private LocalDate parseDate(String value) {
-        if (value == null) return null;
-        try {
-            LocalDate date = LocalDate.parse(value);
-            if (date.getYear() < 1000) throw new BadRequestException("订单查询日期超出范围");
-            return date;
-        } catch (DateTimeParseException exception) {
-            throw new BadRequestException("请输入真实日期，格式为YYYY-MM-DD");
-        }
+        return orders.pageOwned(users.currentUserId(), query);
     }
 
     @Transactional(readOnly = true)

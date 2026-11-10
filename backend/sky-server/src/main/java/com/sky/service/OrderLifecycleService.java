@@ -8,6 +8,8 @@ import com.sky.exception.NotFoundException;
 import com.sky.mapper.OrderLifecycleRepository;
 import com.sky.mapper.OrderLifecycleRepository.State;
 import com.sky.mapper.OrderRepository;
+import com.sky.mapper.OrderRefundRepository;
+import com.sky.vo.RefundVO;
 import com.sky.vo.OrderVO;
 import com.sky.vo.PaymentStatusVO;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,16 +28,18 @@ import java.util.List;
 public class OrderLifecycleService {
     private final UserTransactionLock users;
     private final OrderRepository orders;
+    private final OrderRefundRepository refunds;
     private final OrderLifecycleRepository lifecycle;
     private final MenuPageCache menuCache;
     private final Clock clock;
     private final PaymentChannel paymentChannel;
 
     public OrderLifecycleService(UserTransactionLock users, OrderRepository orders,
-            OrderLifecycleRepository lifecycle, MenuPageCache menuCache, Clock clock,
+            OrderLifecycleRepository lifecycle, OrderRefundRepository refunds, MenuPageCache menuCache, Clock clock,
             @Value("${sky.payment.channel:MOCK}") PaymentChannel paymentChannel) {
         this.users = users;
         this.orders = orders;
+        this.refunds = refunds;
         this.lifecycle = lifecycle;
         this.menuCache = menuCache;
         this.clock = clock;
@@ -68,6 +72,13 @@ public class OrderLifecycleService {
         else if ("CANCELLED".equals(order.status())) state = "CLOSED";
         return new PaymentStatusVO(order.id(), order.number(), order.paymentChannel(), state,
                 order.amount(), order.paidAt());
+    }
+
+    @Transactional(readOnly = true)
+    public RefundVO refund(long id) {
+        validateId(id);
+        findOwned(users.currentUserId(), id);
+        return refunds.find(id).orElseThrow(() -> new NotFoundException("退款记录不存在"));
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)

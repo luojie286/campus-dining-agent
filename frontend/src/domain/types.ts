@@ -25,6 +25,9 @@ export interface CartLine { itemId: number; quantity: number }
 export interface OrderLine { itemId: number; name: string; kind: ItemKind; price: number; quantity: number }
 export interface OrderEvent { status: OrderStatus; time: string; note: string }
 export interface Order {
+  paymentChannel?: 'MOCK' | 'WECHAT'
+  refundStatus?: 'NONE' | 'PROCESSING' | 'SUCCESS' | 'FAILED'
+  refundNo?: string
   id: number; number: string; userId: number; userName: string; status: OrderStatus
   payStatus: 'UNPAID' | 'PAID' | 'REFUNDED'; fulfillment: 'DELIVERY' | 'PICKUP'
   amount: number; createdAt: string; paidAt?: string; paymentDeadline: string

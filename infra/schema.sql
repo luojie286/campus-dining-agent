@@ -19,6 +19,7 @@ CREATE TABLE `employee` (
   `password` varchar(255) NOT NULL COMMENT '密码哈希，不保存明文',
   `phone` varchar(32) NOT NULL COMMENT '手机号',
   `status` int NOT NULL DEFAULT 1 COMMENT '1启用，0停用',
+  `account_role` varchar(32) NOT NULL DEFAULT 'OPERATOR' COMMENT 'ACCOUNT_ADMIN或OPERATOR',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   `create_user` bigint DEFAULT NULL COMMENT '创建的运营账号ID',
@@ -203,6 +204,19 @@ CREATE TABLE `order_submit_replay` (
     `expires_at` DATETIME NOT NULL,
     PRIMARY KEY (`user_id`, `request_key`),
     KEY `idx_order_submit_replay_expiry` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `order_refund` (
+    `order_id` BIGINT NOT NULL,
+    `refund_no` VARCHAR(64) NOT NULL,
+    `channel` VARCHAR(16) NOT NULL,
+    `state` VARCHAR(16) NOT NULL,
+    `amount` DECIMAL(10,2) NOT NULL,
+    `reason` VARCHAR(200) NOT NULL,
+    `requested_at` DATETIME NOT NULL,
+    `refunded_at` DATETIME NULL,
+    PRIMARY KEY (`order_id`),
+    UNIQUE KEY `uk_order_refund_number` (`refund_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 11. 名称、单价、数量都是成交快照，不受当前商品修改影响。

@@ -218,6 +218,68 @@ class UserOrderDatabaseTest {
                 .andExpect(status().is(expected));
     }
 
+    @Test
+    void operatorSearchCountsAndDeliveryFollowTheStateMachine() throws Exception {
+        submit(address, "", 200);
+        long id = ownOrderId();
+        String admin = operatorToken();
+        String path = "/api/admin/order/" + id;
+        String number = jdbc.queryForObject("SELECT number FROM orders WHERE id=?", String.class, id);
+        mvc.perform(get("/api/admin/order/counts").header("token", token))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/order/page").header("token", admin).param("name", number))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(1));
+        mvc.perform(get("/api/admin/order/counts").header("token", admin)
+                        .param("name", number).param("status", "COMPLETED"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.UNPAID").value(1))
+                .andExpect(jsonPath("$.data.COMPLETED").value(0));
+        mvc.perform(post(path + "/ready").header("token", admin)).andExpect(status().isConflict());
+        mvc.perform(post("/api/user/order/" + id + "/pay").header("token", token)).andExpect(status().isOk());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post(path + "/ready").header("token", admin))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("READY_DELIVERY"))
+                    .andExpect(jsonPath("$.data.events.length()").value(3));
+        }
+        mvc.perform(post(path + "/complete").header("token", admin)).andExpect(status().isConflict());
+        mvc.perform(post(path + "/deliver").header("token", admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DELIVERING"));
+        mvc.perform(post(path + "/cancel").header("token", admin)).andExpect(status().isConflict());
+        mvc.perform(post(path + "/complete").header("token", admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
+        assertThat(jdbc.queryForObject("SELECT finish_time FROM orders WHERE id=?", java.sql.Timestamp.class, id)).isNotNull();
+    }
+
+    @Test
+    void operatorCancellationRefundsMockExactlyOnceWithoutReturningFoodStock() throws Exception {
+        submit(address, "", 200);
+        long id = ownOrderId();
+        String admin = operatorToken();
+        String path = "/api/admin/order/" + id;
+        mvc.perform(post("/api/user/order/" + id + "/pay").header("token", token)).andExpect(status().isOk());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post(path + "/cancel").header("token", admin).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"备餐调整\"}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                    .andExpect(jsonPath("$.data.payStatus").value("REFUNDED"))
+                    .andExpect(jsonPath("$.data.refundStatus").value("SUCCESS"));
+        }
+        mvc.perform(get(path + "/refund").header("token", admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.amount").value(28.0));
+        mvc.perform(get("/api/user/order/" + id + "/refund").header("token", jwt.createToken(newUser(), "user")))
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund WHERE order_id=?", Integer.class, id)).isEqualTo(1);
+        assertThat(stock("dish", dish)).isEqualTo(2);
+        assertThat(stock("setmeal", meal)).isEqualTo(3);
+    }
+
+    private String operatorToken() {
+        jdbc.update("""
+                INSERT INTO employee(username,password,name,phone,status,account_role)
+                VALUES (?,'unused','测试运营','13800000000',1,'OPERATOR')
+                """, "operator-" + UUID.randomUUID());
+        return jwt.createToken(lastId(), "admin");
+    }
+
     private long ownOrderId() {
         return jdbc.queryForObject("SELECT id FROM orders WHERE user_id=?", Long.class, user);
     }

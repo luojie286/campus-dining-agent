@@ -8,6 +8,7 @@ import com.sky.dto.InventoryStockUse;
 import com.sky.dto.OrderPageQueryDTO;
 import com.sky.result.PageResult;
 import com.sky.exception.ConflictException;
+import com.sky.exception.BadRequestException;
 import com.sky.vo.OrderVO;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,10 +21,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -96,7 +99,9 @@ public class OrderRepository {
 
     private static final String SELECT_ORDERS = """
             SELECT id,number,user_id,user_name,status,pay_status,fulfillment,amount,order_time,
-                   checkout_time,payment_deadline,consignee,phone,address,remark,events,payment_channel
+                   checkout_time,payment_deadline,consignee,phone,address,remark,events,payment_channel,
+                   (SELECT state FROM order_refund WHERE order_id=orders.id) AS refund_status,
+                   (SELECT refund_no FROM order_refund WHERE order_id=orders.id) AS refund_no
             FROM orders
             """;
 
@@ -108,45 +113,96 @@ public class OrderRepository {
             time(row.getObject("checkout_time", LocalDateTime.class)),
             time(row.getObject("payment_deadline", LocalDateTime.class)), row.getString("consignee"),
             row.getString("phone"), row.getString("address"), row.getString("remark"),
-            List.of(), events(row.getString("events")), row.getString("payment_channel"));
+            List.of(), events(row.getString("events")), row.getString("payment_channel"),
+            row.getString("refund_status"), row.getString("refund_no"));
 
     public Optional<OrderVO> findOwned(long userId, long id) {
         var records = jdbc.query(SELECT_ORDERS + " WHERE user_id=? AND id=?", header, userId, id);
         return withLines(records).stream().findFirst();
     }
 
-    public PageResult<OrderVO> pageOwned(long userId, OrderPageQueryDTO query, LocalDate begin, LocalDate end) {
-        StringBuilder where = new StringBuilder(" WHERE user_id=?");
-        List<Object> values = new ArrayList<>();
-        values.add(userId);
-        if (query.getStatus() != null) {
-            where.append(" AND status=?");
-            values.add(query.getStatus().code());
-        }
-        if (query.getName() != null && !query.getName().isBlank()) {
-            String pattern = "%" + query.getName().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
-            where.append(" AND (number LIKE ? ESCAPE '!' OR user_name LIKE ? ESCAPE '!')");
-            values.add(pattern);
-            values.add(pattern);
-        }
-        if (begin != null) {
-            where.append(" AND order_time>=?");
-            values.add(begin.atStartOfDay());
-        }
-        if (end != null && !end.equals(LocalDate.of(9999, 12, 31))) {
-            where.append(" AND order_time<?");
-            values.add(end.plusDays(1).atStartOfDay());
-        }
-        long total = jdbc.queryForObject("SELECT COUNT(*) FROM orders" + where, Long.class, values.toArray());
+    public Optional<OrderVO> findAny(long id) {
+        return withLines(jdbc.query(SELECT_ORDERS + " WHERE id=?", header, id)).stream().findFirst();
+    }
+
+    public PageResult<OrderVO> pageOwned(long userId, OrderPageQueryDTO query) {
+        return page(userId, query);
+    }
+
+    public PageResult<OrderVO> pageForOperator(OrderPageQueryDTO query) {
+        return page(null, query);
+    }
+
+    public Map<String, Long> countByStatus(OrderPageQueryDTO query) {
+        Filters filters = filters(null, query, false);
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (OrderPageQueryDTO.State state : OrderPageQueryDTO.State.values()) counts.put(state.name(), 0L);
+        jdbc.query("SELECT status,COUNT(*) AS amount FROM orders" + filters.sql() + " GROUP BY status", row -> {
+            counts.put(OrderPageQueryDTO.State.fromCode(row.getInt("status")).name(), row.getLong("amount"));
+        }, filters.values().toArray());
+        return counts;
+    }
+
+    private PageResult<OrderVO> page(Long userId, OrderPageQueryDTO query) {
+        Filters filters = filters(userId, query, true);
+        List<Object> values = filters.values();
+        long total = jdbc.queryForObject("SELECT COUNT(*) FROM orders" + filters.sql(), Long.class, values.toArray());
         long offset = (query.getPage() - 1L) * query.getPageSize();
         if (offset >= total) return new PageResult<>(total, List.of());
 
         values.add(query.getPageSize());
         values.add(offset);
-        List<OrderVO> records = jdbc.query(SELECT_ORDERS + where
+        List<OrderVO> records = jdbc.query(SELECT_ORDERS + filters.sql()
                 + " ORDER BY order_time DESC,id DESC LIMIT ? OFFSET ?", header, values.toArray());
         return new PageResult<>(total, withLines(records));
     }
+
+    private Filters filters(Long userId, OrderPageQueryDTO query, boolean includeStatus) {
+        LocalDate begin = parseDate(query.getBegin());
+        LocalDate end = parseDate(query.getEnd());
+        if (begin != null && end != null && begin.isAfter(end)) {
+            throw new BadRequestException("开始日期不能晚于结束日期");
+        }
+
+        List<String> predicates = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+        if (userId != null) {
+            predicates.add("user_id=?");
+            values.add(userId);
+        }
+        if (includeStatus && query.getStatus() != null) {
+            predicates.add("status=?");
+            values.add(query.getStatus().code());
+        }
+        if (query.getName() != null && !query.getName().isBlank()) {
+            String pattern = "%" + query.getName().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            predicates.add("(number LIKE ? ESCAPE '!' OR user_name LIKE ? ESCAPE '!')");
+            values.add(pattern);
+            values.add(pattern);
+        }
+        if (begin != null) {
+            predicates.add("order_time>=?");
+            values.add(begin.atStartOfDay());
+        }
+        if (end != null && !end.equals(LocalDate.of(9999, 12, 31))) {
+            predicates.add("order_time<?");
+            values.add(end.plusDays(1).atStartOfDay());
+        }
+        return new Filters(predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates), values);
+    }
+
+    private LocalDate parseDate(String value) {
+        if (value == null) return null;
+        try {
+            LocalDate date = LocalDate.parse(value);
+            if (date.getYear() < 1000) throw new BadRequestException("订单查询日期超出范围");
+            return date;
+        } catch (DateTimeParseException exception) {
+            throw new BadRequestException("请输入真实日期，格式为YYYY-MM-DD");
+        }
+    }
+
+    private record Filters(String sql, List<Object> values) {}
 
     private List<OrderVO> withLines(List<OrderVO> orders) {
         if (orders.isEmpty()) return List.of();
@@ -167,7 +223,7 @@ public class OrderRepository {
                 order.userName(), order.status(), order.payStatus(), order.fulfillment(), order.amount(),
                 order.createdAt(), order.paidAt(), order.paymentDeadline(), order.recipient(), order.phone(),
                 order.address(), order.remark(), linesByOrder.getOrDefault(order.id(), List.of()),
-                order.events(), order.paymentChannel())).toList();
+                order.events(), order.paymentChannel(), order.refundStatus(), order.refundNo())).toList();
     }
 
     public Optional<OrderVO> replay(long userId, String key, String hash) {

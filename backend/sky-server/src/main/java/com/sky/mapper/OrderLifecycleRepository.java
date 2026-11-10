@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sky.dto.InventoryStockUse;
+import com.sky.dto.OrderPageQueryDTO;
 import com.sky.exception.ConflictException;
 import com.sky.vo.OrderVO;
 import org.springframework.context.annotation.Profile;
@@ -98,6 +99,23 @@ public class OrderLifecycleRepository {
                 UPDATE orders SET status=6,cancel_time=?,cancel_reason=?,events=?
                 WHERE id=? AND status=1 AND pay_status=0 AND payment_channel='MOCK'
                 """, now.toLocalDateTime(), reason, append(order, "CANCELLED", now, reason), order.id());
+        if (rows != 1) throw new ConflictException("订单状态已变化");
+    }
+
+    public void advance(State order, OrderPageQueryDTO.State target, OffsetDateTime now, String note) {
+        int rows = jdbc.update("""
+                UPDATE orders SET status=?,finish_time=CASE WHEN ?=5 THEN ? ELSE finish_time END,events=?
+                WHERE id=? AND status=? AND pay_status=1
+                """, target.code(), target.code(), now.toLocalDateTime(),
+                append(order, target.name(), now, note), order.id(), order.status());
+        if (rows != 1) throw new ConflictException("订单状态已变化");
+    }
+
+    public void cancelRefundedMock(State order, OffsetDateTime now, String reason) {
+        int rows = jdbc.update("""
+                UPDATE orders SET status=6,pay_status=2,cancel_time=?,cancel_reason=?,events=?
+                WHERE id=? AND status IN (2,3,7) AND pay_status=1 AND payment_channel='MOCK'
+                """, now.toLocalDateTime(), reason, append(order, "CANCELLED", now, "模拟退款完成：" + reason), order.id());
         if (rows != 1) throw new ConflictException("订单状态已变化");
     }
 

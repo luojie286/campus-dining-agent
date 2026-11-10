@@ -9,6 +9,7 @@ import com.sky.result.Result;
 import com.sky.service.UserOrderService;
 import com.sky.service.OrderLifecycleService;
 import com.sky.vo.PaymentStatusVO;
+import com.sky.vo.RefundVO;
 import com.sky.vo.OrderVO;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
@@ -63,5 +64,9 @@ public class UserOrderController {
     @PostMapping("/{id}/cancel")
     public Result<OrderVO> cancel(@PathVariable("id") long id) {
         return Result.success(lifecycle.cancel(id));
+    }
+    @GetMapping("/{id}/refund")
+    public Result<RefundVO> refund(@PathVariable("id") long id) {
+        return Result.success(lifecycle.refund(id));
     }
 }

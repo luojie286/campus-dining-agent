@@ -112,6 +112,7 @@ export const api = {
   setCart: (lines: CartLine[]) => select(() => mock.setCart(lines), () => request<CartLine[]>('/user/shoppingCart', 'PUT', { lines })),
   submitOrder: (input: { fulfillment: 'DELIVERY' | 'PICKUP'; addressId?: number; remark: string }) => select(() => mock.submitOrder(input), () => request<Order>('/user/order/submit', 'POST', input)),
   orders: (query: ListQuery = {}) => select(() => mock.orders(query), () => request<Page<Order>>(`${rolePath()}/order/page`, 'GET', undefined, { ...query })),
+  orderCounts: (query: Pick<ListQuery, 'name' | 'begin' | 'end'> = {}) => request<Record<string, number>>('/admin/order/counts', 'GET', undefined, { ...query }),
   order: (id: number) => select(() => mock.order(id), () => request<Order>(`${rolePath()}/order/${id}`)),
   orderAction: (id: number, action: 'pay' | 'cancel' | 'ready' | 'deliver' | 'complete') => select(() => mock.orderAction(id, action), () => request<Order>(`${rolePath()}/order/${id}/${action}`, 'POST')),
   metrics: (begin?: string, end?: string) => select(() => mock.metrics(begin, end), () => request<Dashboard>('/admin/report/overview', 'GET', undefined, { begin, end })),
