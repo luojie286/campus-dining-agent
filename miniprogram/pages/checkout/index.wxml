@@ -1,0 +1,39 @@
+<view class="checkout">
+  <view wx:if="{{order}}" class="checkout-card">
+    <text class="checkout-title">订单已创建 · 待支付</text>
+    <text class="checkout-line">订单号 {{order.number}}</text>
+    <text class="checkout-line">金额 ¥{{order.amount}}</text>
+    <text class="checkout-line">支付截止 {{deadline}}</text>
+    <text class="checkout-line">{{order.address}}</text>
+    <navigator class="checkout-link" url="/pages/menu/index" open-type="reLaunch">返回菜单</navigator>
+  </view>
+
+  <view wx:else>
+    <view class="checkout-card">
+      <text class="checkout-title">收餐方式</text>
+      <view class="checkout-actions">
+        <button size="mini" type="{{fulfillment === 'DELIVERY' ? 'primary' : 'default'}}"
+          disabled="{{busy}}" bindtap="chooseFulfillment" data-type="DELIVERY">园区配送</button>
+        <button size="mini" type="{{fulfillment === 'PICKUP' ? 'primary' : 'default'}}"
+          disabled="{{busy}}" bindtap="chooseFulfillment" data-type="PICKUP">到店自提</button>
+      </view>
+      <view wx:if="{{fulfillment === 'DELIVERY'}}">
+        <picker wx:if="{{addresses.length}}" mode="selector" range="{{addresses}}" range-key="label"
+          value="{{addressIndex}}" bindchange="chooseAddress" disabled="{{busy}}">
+          <view class="checkout-line">{{addresses[addressIndex].label}} ›</view>
+        </picker>
+        <navigator wx:if="{{!busy}}" class="checkout-link" url="/pages/addresses/index">管理收餐地址 ›</navigator>
+      </view>
+      <text wx:else class="checkout-line">自提使用你在账户资料中的联系电话。</text>
+    </view>
+
+    <view class="checkout-card">
+      <text class="checkout-title">订单备注</text>
+      <textarea maxlength="300" value="{{remark}}" bindinput="changeRemark"
+        disabled="{{busy}}" placeholder="可选，最多 300 字" />
+    </view>
+    <view wx:if="{{error}}" class="checkout-error">{{error}}</view>
+    <button type="primary" bindtap="submit" disabled="{{busy || loading}}"
+      loading="{{busy}}">确认下单</button>
+  </view>
+</view>

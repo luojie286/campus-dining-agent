@@ -1,0 +1,9 @@
+.checkout { padding: 24rpx; }
+.checkout-card { padding: 22rpx; border: 1rpx solid #dceaf5; background: #fff; border-radius: 16rpx; margin-bottom: 18rpx; }
+.checkout-title { display: block; font-size: 30rpx; font-weight: 700; }
+.checkout-line, .checkout-link { display: block; margin-top: 14rpx; font-size: 25rpx; overflow-wrap: anywhere; }
+.checkout-link { color: #075e94; }
+.checkout-actions { display: flex; gap: 12rpx; margin-top: 16rpx; }
+.checkout-actions button { margin: 0; }
+.checkout textarea { box-sizing: border-box; width: 100%; height: 130rpx; border-radius: 10rpx; margin-top: 12rpx; padding: 12rpx; background: #f2f8fd; font-size: 25rpx; }
+.checkout-error { margin-bottom: 14rpx; color: #9a4235; font-size: 25rpx; }

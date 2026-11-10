@@ -38,7 +38,8 @@ public class JwtWebMvcConfiguration implements WebMvcConfigurer {
                         "/api/user/shoppingCart",
                         "/api/user/shoppingCart/**",
                         "/api/user/addressBook",
-                        "/api/user/addressBook/**"
+                        "/api/user/addressBook/**",
+                        "/api/user/order/**"
                 );
     }
 }

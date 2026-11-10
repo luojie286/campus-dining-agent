@@ -7,7 +7,7 @@ const shop = { name: '接口测试食堂', open: true, openingHours: '11:00–13
 const ok = data => ({ statusCode: 200, data: { code: 1, data } })
 
 function setup(handler) {
-  for (const name of ['menu', 'request', 'api-menu', 'mock-menu', 'config', 'cart']) {
+  for (const name of ['menu', 'request', 'api-menu', 'mock-menu', 'config', 'cart', 'orders']) {
     delete require.cache[require.resolve(path.join(services, name))]
   }
   let logins = 0
@@ -146,4 +146,23 @@ test('加购连接超时后复用幂等键，成功后的新点击使用新键',
   assert.notEqual(keys[1], keys[2])
   assert.match(keys[0], /^[A-Za-z0-9_-]{16,64}$/)
   assert.deepEqual(requests[0].data, { itemId: 2, quantity: 1 })
+})
+
+test('订单响应丢失时重试沿用原下单键', async () => {
+  let lost = true
+  const context = setup(options => {
+    if (options.url.endsWith('/wechat/login')) return loginResponse(options)
+    if (lost) {
+      lost = false
+      throw new Error('响应丢失')
+    }
+    return ok({ id: 13, status: 'UNPAID' })
+  })
+  const orders = require(path.join(services, 'orders'))
+  const body = { fulfillment: 'DELIVERY', remark: '', addressId: 1 }
+  await assert.rejects(orders.submit(body), /无法连接后端/)
+  assert.equal((await orders.submit(body)).id, 13)
+  const submits = context.calls.filter(call => call.url.endsWith('/order/submit'))
+  assert.equal(submits[0].header['Idempotency-Key'], submits[1].header['Idempotency-Key'])
+  assert.deepEqual(submits[1].data, body)
 })

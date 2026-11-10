@@ -18,6 +18,9 @@ public interface ShopMapper extends BaseMapper<Shop> {
             """)
     Shop selectForUpdate(@Param("id") long id);
 
+    @Select("SELECT id, status, pickup_point FROM shop WHERE id = #{id} FOR SHARE")
+    Shop selectForOrder(@Param("id") long id);
+
     @Update("""
             UPDATE shop
             SET status = #{status}

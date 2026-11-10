@@ -1,10 +1,17 @@
+const config = require('../../services/config')
 const cart = require('../../services/cart')
 const { createMenuSource } = require('../../services/menu')
 
 Page({
-  data: { rows: [], loading: true, busy: false, error: '', catalogWarning: '' },
+  data: { canCheckout: config.mode === 'api', rows: [], loading: true, busy: false, error: '', catalogWarning: '' },
 
   onShow() { this.load() },
+
+  checkout() {
+    if (this.data.rows.length && !this.data.busy && !this.data.loading) {
+      wx.navigateTo({ url: '/pages/checkout/index' })
+    }
+  },
 
   async load() {
     this.setData({ loading: true, error: '', catalogWarning: '' })

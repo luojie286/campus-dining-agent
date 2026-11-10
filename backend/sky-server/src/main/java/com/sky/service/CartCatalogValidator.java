@@ -1,6 +1,7 @@
 package com.sky.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.sky.dto.InventoryStockUse;
 import com.sky.entity.Category;
 import com.sky.entity.Dish;
 import com.sky.entity.Setmeal;
@@ -14,7 +15,9 @@ import com.sky.mapper.ShoppingCartRepository.ProductSnapshot;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -41,6 +44,17 @@ public class CartCatalogValidator {
 
     /** 调用者已锁用户行。与商品写入保持分类、菜品、套餐、组成的加锁顺序。 */
     public Map<Long, ProductSnapshot> validate(Map<Long, Integer> cart) {
+        return check(cart, false).products();
+    }
+
+    public Allocation prepareOrder(Map<Long, Integer> cart) {
+        return check(cart, true);
+    }
+
+    public record Allocation(Map<Long, ProductSnapshot> products, List<InventoryStockUse> stock) {}
+
+    private Allocation check(Map<Long, Integer> cart, boolean reserve) {
+        String productLock = reserve ? "FOR UPDATE" : "FOR SHARE";
         Map<Long, Setmeal> observedMeals = new TreeMap<>();
         Map<Long, Map<Long, Integer>> observedParts = new HashMap<>();
         TreeSet<Long> dishIds = new TreeSet<>();
@@ -80,7 +94,7 @@ public class CartCatalogValidator {
         Map<Long, Dish> lockedDishes = new HashMap<>();
         for (long id : dishIds) {
             Dish dish = dishes.selectOne(new LambdaQueryWrapper<Dish>()
-                    .eq(Dish::getId, id).last("FOR SHARE"));
+                    .eq(Dish::getId, id).last(productLock));
             if (dish == null || !Objects.equals(dish.getCategoryId(), observedDishes.get(id).getCategoryId())
                     || !enabled(dish.getStatus(), lockedCategories.get(dish.getCategoryId()), 1)) {
                 throw unavailable();
@@ -91,7 +105,7 @@ public class CartCatalogValidator {
         Map<Long, Setmeal> lockedMeals = new HashMap<>();
         for (var entry : observedMeals.entrySet()) {
             Setmeal meal = setmeals.selectOne(new LambdaQueryWrapper<Setmeal>()
-                    .eq(Setmeal::getId, entry.getKey()).last("FOR SHARE"));
+                    .eq(Setmeal::getId, entry.getKey()).last(productLock));
             if (meal == null || !Objects.equals(meal.getCategoryId(), entry.getValue().getCategoryId())
                     || !enabled(meal.getStatus(), lockedCategories.get(meal.getCategoryId()), 2)) {
                 throw unavailable();
@@ -104,7 +118,8 @@ public class CartCatalogValidator {
             }
         }
 
-        Map<Long, Integer> dishDemand = new HashMap<>();
+        Map<Long, Integer> dishDemand = new TreeMap<>();
+        Map<Long, Integer> mealDemand = new TreeMap<>();
         Map<Long, ProductSnapshot> snapshots = new HashMap<>();
         for (var line : cart.entrySet()) {
             long itemId = line.getKey();
@@ -117,6 +132,7 @@ public class CartCatalogValidator {
             } else {
                 Setmeal meal = lockedMeals.get(id);
                 if (meal.getStock() < quantity) throw insufficient();
+                mealDemand.put(id, quantity);
                 for (var part : observedParts.get(id).entrySet()) {
                     dishDemand.merge(part.getKey(), part.getValue() * quantity, Integer::sum);
                 }
@@ -127,7 +143,10 @@ public class CartCatalogValidator {
         for (var demand : dishDemand.entrySet()) {
             if (lockedDishes.get(demand.getKey()).getStock() < demand.getValue()) throw insufficient();
         }
-        return snapshots;
+        List<InventoryStockUse> stock = new ArrayList<>();
+        dishDemand.forEach((id, amount) -> stock.add(new InventoryStockUse("dish", id, amount)));
+        mealDemand.forEach((id, amount) -> stock.add(new InventoryStockUse("setmeal", id, amount)));
+        return new Allocation(snapshots, stock);
     }
 
     private Map<Long, Integer> parts(long mealId, boolean lock) {

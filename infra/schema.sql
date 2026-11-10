@@ -1,5 +1,5 @@
 -- 智能园区餐饮 Agent 平台：当前学习版建表脚本。
--- 参考苍穹外卖的 11 张表，另加 shop、agent_action，共 13 张表。
+-- 包含园区业务表，以及购物车和下单的幂等记录表。
 -- 数据库目标 MySQL 8；说明见 docs/DATABASE_DESIGN.md。
 -- 旧版 24 表架构保存在 temp，暂不使用，不能与本脚本混合执行。
 -- 只供手动首次建表，无 DROP、业务数据 INSERT 或自动导入。
@@ -184,7 +184,7 @@ CREATE TABLE `orders` (
   `cancel_reason` varchar(255) DEFAULT NULL,
   `cancel_time` datetime DEFAULT NULL,
   `finish_time` datetime DEFAULT NULL COMMENT '完成时间',
-  `inventory_snapshot` text NOT NULL COMMENT '下单扣减库存清单JSON字符串，仅后端创建，用于准确释放',
+  `inventory_snapshot` mediumtext NOT NULL COMMENT '下单扣减库存清单JSON字符串，仅后端创建，用于准确释放',
   `events` text NOT NULL COMMENT '订单事件JSON数组字符串，同事务追加，不是模型推理',
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_order_number` (`number`),
@@ -193,6 +193,16 @@ CREATE TABLE `orders` (
   KEY `idx_order_time` (`order_time`),
   KEY `idx_order_checkout` (`checkout_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单';
+
+CREATE TABLE `order_submit_replay` (
+    `user_id` BIGINT NOT NULL,
+    `request_key` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `request_hash` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `response_json` JSON NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    PRIMARY KEY (`user_id`, `request_key`),
+    KEY `idx_order_submit_replay_expiry` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 11. 名称、单价、数量都是成交快照，不受当前商品修改影响。
 CREATE TABLE `order_detail` (

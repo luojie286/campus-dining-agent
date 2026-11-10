@@ -19,4 +19,6 @@
     </view>
     <button size="mini" bindtap="remove" data-id="{{item.itemId}}" disabled="{{busy || loading}}">移除</button>
   </view>
+  <button wx:if="{{canCheckout && rows.length}}" type="primary" bindtap="checkout"
+    disabled="{{busy || loading}}">去结算</button>
 </view>
