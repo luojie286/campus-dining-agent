@@ -12,6 +12,7 @@
     <text wx:if="{{order.paymentChannel === 'MOCK'}}" class="checkout-line">模拟支付不会扣款。</text>
     <view wx:if="{{error}}" class="checkout-error">{{error}}</view>
     <text class="checkout-line">{{order.address}}</text>
+    <navigator class="checkout-link" url="/pages/order-detail/index?id={{order.id}}">查看订单详情</navigator>
     <navigator class="checkout-link" url="/pages/menu/index" open-type="reLaunch">返回菜单</navigator>
   </view>
 

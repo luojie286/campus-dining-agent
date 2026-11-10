@@ -168,6 +168,56 @@ class UserOrderDatabaseTest {
         assertThat(stock("dish", dish)).isEqualTo(2);
     }
 
+    @Test
+    void historyIsOwnedAndOrderedWithAccurateTotals() throws Exception {
+        submit(address, "", 200);
+        long first = ownOrderId();
+        jdbc.update("UPDATE dish SET stock=10 WHERE id=?", dish);
+        reorder(first, token, 200);
+        mvc.perform(post(SUBMIT).header("token", token).header("Idempotency-Key", "history-order-0002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fulfillment":"DELIVERY","addressId":%d,"remark":""}
+                                """.formatted(address)))
+                .andExpect(status().isOk());
+
+        String page = "/api/user/order/page";
+        mvc.perform(get(page).header("token", token).param("pageSize", "1").param("status", "UNPAID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.records[0].lines.length()").value(2));
+        mvc.perform(get(page).header("token", token).param("pageSize", "1").param("page", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.records[0].id").value(first));
+        mvc.perform(get(page).header("token", jwt.createToken(newUser(), "user")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get(page).header("token", token).param("begin", "2026-02-30"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(page).header("token", token).param("status", "1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reorderChecksCurrentStockAndReplaysWithoutIncreasingAgain() throws Exception {
+        submit(address, "", 200);
+        long id = ownOrderId();
+        reorder(id, jwt.createToken(newUser(), "user"), 404);
+        reorder(id, token, 409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM shopping_cart WHERE user_id=?", Integer.class, user)).isZero();
+
+        jdbc.update("UPDATE dish SET stock=5 WHERE id=?", dish);
+        reorder(id, token, 200);
+        reorder(id, token, 200);
+        assertThat(jdbc.queryForObject("SELECT SUM(number) FROM shopping_cart WHERE user_id=?", Integer.class, user)).isEqualTo(2);
+        assertThat(stock("dish", dish)).isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE user_id=?", Integer.class, user)).isEqualTo(1);
+    }
+
+    private void reorder(long id, String auth, int expected) throws Exception {
+        mvc.perform(post("/api/user/order/" + id + "/reorder").header("token", auth)
+                        .header("Idempotency-Key", "history-reorder-0001"))
+                .andExpect(status().is(expected));
+    }
+
     private long ownOrderId() {
         return jdbc.queryForObject("SELECT id FROM orders WHERE user_id=?", Long.class, user);
     }

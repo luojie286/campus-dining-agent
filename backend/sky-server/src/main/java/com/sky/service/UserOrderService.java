@@ -2,6 +2,8 @@ package com.sky.service;
 
 import com.sky.cache.MenuPageCache;
 import com.sky.dto.OrderSubmitDTO;
+import com.sky.dto.OrderPageQueryDTO;
+import com.sky.result.PageResult;
 import com.sky.entity.Shop;
 import com.sky.entity.User;
 import com.sky.exception.BadRequestException;
@@ -9,6 +11,7 @@ import com.sky.exception.ConflictException;
 import com.sky.exception.NotFoundException;
 import com.sky.exception.ServiceUnavailableException;
 import com.sky.mapper.AddressBookRepository;
+import com.sky.mapper.CartReplayRepository;
 import com.sky.mapper.OrderRepository;
 import com.sky.mapper.ShopMapper;
 import com.sky.mapper.ShoppingCartRepository;
@@ -20,15 +23,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +55,7 @@ public class UserOrderService {
     private final ShopMapper shops;
     private final AddressBookRepository addresses;
     private final ShoppingCartRepository carts;
+    private final CartReplayRepository cartReplay;
     private final CartCatalogValidator catalog;
     private final OrderRepository orders;
     private final MenuPageCache menuCache;
@@ -55,7 +63,8 @@ public class UserOrderService {
     private final PaymentChannel paymentChannel;
 
     public UserOrderService(UserTransactionLock users, UserMapper userMapper, ShopMapper shops,
-            AddressBookRepository addresses, ShoppingCartRepository carts, CartCatalogValidator catalog,
+            AddressBookRepository addresses, ShoppingCartRepository carts, CartReplayRepository cartReplay,
+            CartCatalogValidator catalog,
             OrderRepository orders, MenuPageCache menuCache, Clock clock,
             @Value("${sky.payment.channel:MOCK}") PaymentChannel paymentChannel) {
         this.users = users;
@@ -63,6 +72,7 @@ public class UserOrderService {
         this.shops = shops;
         this.addresses = addresses;
         this.carts = carts;
+        this.cartReplay = cartReplay;
         this.catalog = catalog;
         this.orders = orders;
         this.menuCache = menuCache;
@@ -139,11 +149,81 @@ public class UserOrderService {
         return result;
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResult<OrderVO> page(OrderPageQueryDTO query) {
+        LocalDate begin = parseDate(query.getBegin());
+        LocalDate end = parseDate(query.getEnd());
+        if (begin != null && end != null && begin.isAfter(end)) {
+            throw new BadRequestException("开始日期不能晚于结束日期");
+        }
+        return orders.pageOwned(users.currentUserId(), query, begin, end);
+    }
+
+    private LocalDate parseDate(String value) {
+        if (value == null) return null;
+        try {
+            LocalDate date = LocalDate.parse(value);
+            if (date.getYear() < 1000) throw new BadRequestException("订单查询日期超出范围");
+            return date;
+        } catch (DateTimeParseException exception) {
+            throw new BadRequestException("请输入真实日期，格式为YYYY-MM-DD");
+        }
+    }
+
     @Transactional(readOnly = true)
     public OrderVO detail(long id) {
-        if (id < 1 || id > 9007199254740991L) throw new BadRequestException("订单ID不合法");
+        validateOrderId(id);
         return orders.findOwned(users.currentUserId(), id)
                 .orElseThrow(() -> new NotFoundException("订单不存在"));
+    }
+
+    @Transactional
+    public List<CartLineVO> reorder(long id, String key) {
+        validateOrderId(id);
+        if (key == null || !REQUEST_KEY.matcher(key).matches()) {
+            throw new BadRequestException("Idempotency-Key必须为16至64位字母、数字、下划线或连字符");
+        }
+        long userId = users.lockCurrentUser(true);
+        // 冒号不能出现在客户端加购键中，复用幂等表时仍与普通加购隔离。
+        String replayKey = "reorder:" + Base64.getUrlEncoder().withoutPadding().encodeToString(sha256(key));
+        var previous = cartReplay.find(userId, replayKey, id, 1);
+        if (previous.isPresent()) return previous.get();
+
+        OrderVO order = orders.findOwned(userId, id)
+                .orElseThrow(() -> new NotFoundException("订单不存在"));
+        if (order.lines().isEmpty()) throw new ConflictException("历史订单没有可重新加入的商品");
+
+        Map<Long, Integer> current = new TreeMap<>();
+        for (CartLineVO line : carts.list(userId)) current.put(line.itemId(), line.quantity());
+        Map<Long, Integer> merged = new TreeMap<>(current);
+        for (OrderVO.Line line : order.lines()) {
+            if (line.itemId() < 2 || line.itemId() > 9007199254740991L
+                    || line.quantity() < 1 || line.quantity() > 99) {
+                throw new ConflictException("历史订单商品数据不合法");
+            }
+            int quantity = merged.merge(line.itemId(), line.quantity(), Integer::sum);
+            if (quantity > 99) throw new ConflictException("单个商品最多99份");
+        }
+        if (merged.size() > 100) throw new ConflictException("购物车最多容纳100种商品");
+
+        var products = catalog.validate(merged);
+        for (var line : merged.entrySet()) {
+            long itemId = line.getKey();
+            Integer before = current.get(itemId);
+            if (before == null) {
+                carts.insert(userId, itemId, line.getValue(), products.get(itemId));
+            } else if (!before.equals(line.getValue())) {
+                carts.updateQuantity(userId, itemId, line.getValue());
+            }
+        }
+
+        List<CartLineVO> result = carts.list(userId);
+        cartReplay.save(userId, replayKey, id, 1, result);
+        return result;
+    }
+
+    private void validateOrderId(long id) {
+        if (id < 1 || id > 9007199254740991L) throw new BadRequestException("订单ID不合法");
     }
 
     private Recipient deliveryRecipient(long userId, long addressId) {
@@ -170,9 +250,12 @@ public class UserOrderService {
 
     private String requestHash(OrderSubmitDTO dto, String remark) {
         String normalized = dto.getFulfillment() + "|" + dto.getAddressId() + "|" + remark;
+        return HexFormat.of().formatHex(sha256(normalized));
+    }
+
+    private byte[] sha256(String value) {
         try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(StandardCharsets.UTF_8)));
+            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256不可用", exception);
         }

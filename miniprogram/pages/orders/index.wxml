@@ -1,0 +1,15 @@
+<view class="orders">
+  <picker mode="selector" range="{{filters}}" range-key="label" value="{{selected}}" bindchange="selectStatus">
+    <view class="order-filter">{{filters[selected].label}} ▾</view>
+  </picker>
+  <navigator wx:for="{{records}}" wx:key="id" class="order-card" url="/pages/order-detail/index?id={{item.id}}">
+    <view class="order-top"><text>{{item.number}}</text><text class="order-status">{{item.statusLabel}}</text></view>
+    <text class="order-time">{{item.createdLabel}}</text>
+    <text wx:for="{{item.lines}}" wx:for-item="line" wx:key="itemId" class="order-item">{{line.name}} × {{line.quantity}}</text>
+    <view class="order-top"><text>¥{{item.amountLabel}}</text><text class="order-status">查看详情 ›</text></view>
+  </navigator>
+  <view wx:if="{{loading}}" class="order-state">正在加载订单…</view>
+  <view wx:elif="{{error}}" class="order-state">{{error}} <button size="mini" bindtap="retry">重试</button></view>
+  <view wx:elif="{{!records.length}}" class="order-state">暂无订单</view>
+  <button wx:elif="{{hasMore}}" size="mini" bindtap="loadMore">加载更多</button>
+</view>

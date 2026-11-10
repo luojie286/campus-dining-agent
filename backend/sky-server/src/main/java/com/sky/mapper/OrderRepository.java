@@ -5,18 +5,26 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sky.dto.InventoryStockUse;
+import com.sky.dto.OrderPageQueryDTO;
+import com.sky.result.PageResult;
 import com.sky.exception.ConflictException;
 import com.sky.vo.OrderVO;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -86,32 +94,80 @@ public class OrderRepository {
                 line.name(), image, line.price(), line.quantity());
     }
 
-    public Optional<OrderVO> findOwned(long userId, long id) {
-        var orders = jdbc.query("""
-                SELECT id,number,user_id,user_name,status,pay_status,fulfillment,amount,order_time,
-                       checkout_time,payment_deadline,consignee,phone,address,remark,events,payment_channel
-                FROM orders WHERE user_id=? AND id=?
-                """, (row, index) -> new OrderVO(
-                row.getLong("id"), row.getString("number"), row.getLong("user_id"), row.getString("user_name"),
-                status(row.getInt("status")), paymentStatus(row.getInt("pay_status")), row.getString("fulfillment"),
-                row.getBigDecimal("amount"), time(row.getObject("order_time", LocalDateTime.class)),
-                time(row.getObject("checkout_time", LocalDateTime.class)),
-                time(row.getObject("payment_deadline", LocalDateTime.class)), row.getString("consignee"),
-                row.getString("phone"), row.getString("address"), row.getString("remark"),
-                List.of(), events(row.getString("events")), row.getString("payment_channel")), userId, id);
-        if (orders.isEmpty()) return Optional.empty();
+    private static final String SELECT_ORDERS = """
+            SELECT id,number,user_id,user_name,status,pay_status,fulfillment,amount,order_time,
+                   checkout_time,payment_deadline,consignee,phone,address,remark,events,payment_channel
+            FROM orders
+            """;
 
-        OrderVO order = orders.getFirst();
-        List<OrderVO.Line> lines = jdbc.query("""
-                SELECT CASE WHEN dish_id IS NOT NULL THEN dish_id*2 ELSE setmeal_id*2+1 END AS item_id,
+    private final RowMapper<OrderVO> header = (row, index) -> new OrderVO(
+            row.getLong("id"), row.getString("number"), row.getLong("user_id"), row.getString("user_name"),
+            OrderPageQueryDTO.State.fromCode(row.getInt("status")).name(),
+            paymentStatus(row.getInt("pay_status")), row.getString("fulfillment"),
+            row.getBigDecimal("amount"), time(row.getObject("order_time", LocalDateTime.class)),
+            time(row.getObject("checkout_time", LocalDateTime.class)),
+            time(row.getObject("payment_deadline", LocalDateTime.class)), row.getString("consignee"),
+            row.getString("phone"), row.getString("address"), row.getString("remark"),
+            List.of(), events(row.getString("events")), row.getString("payment_channel"));
+
+    public Optional<OrderVO> findOwned(long userId, long id) {
+        var records = jdbc.query(SELECT_ORDERS + " WHERE user_id=? AND id=?", header, userId, id);
+        return withLines(records).stream().findFirst();
+    }
+
+    public PageResult<OrderVO> pageOwned(long userId, OrderPageQueryDTO query, LocalDate begin, LocalDate end) {
+        StringBuilder where = new StringBuilder(" WHERE user_id=?");
+        List<Object> values = new ArrayList<>();
+        values.add(userId);
+        if (query.getStatus() != null) {
+            where.append(" AND status=?");
+            values.add(query.getStatus().code());
+        }
+        if (query.getName() != null && !query.getName().isBlank()) {
+            String pattern = "%" + query.getName().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            where.append(" AND (number LIKE ? ESCAPE '!' OR user_name LIKE ? ESCAPE '!')");
+            values.add(pattern);
+            values.add(pattern);
+        }
+        if (begin != null) {
+            where.append(" AND order_time>=?");
+            values.add(begin.atStartOfDay());
+        }
+        if (end != null && !end.equals(LocalDate.of(9999, 12, 31))) {
+            where.append(" AND order_time<?");
+            values.add(end.plusDays(1).atStartOfDay());
+        }
+        long total = jdbc.queryForObject("SELECT COUNT(*) FROM orders" + where, Long.class, values.toArray());
+        long offset = (query.getPage() - 1L) * query.getPageSize();
+        if (offset >= total) return new PageResult<>(total, List.of());
+
+        values.add(query.getPageSize());
+        values.add(offset);
+        List<OrderVO> records = jdbc.query(SELECT_ORDERS + where
+                + " ORDER BY order_time DESC,id DESC LIMIT ? OFFSET ?", header, values.toArray());
+        return new PageResult<>(total, withLines(records));
+    }
+
+    private List<OrderVO> withLines(List<OrderVO> orders) {
+        if (orders.isEmpty()) return List.of();
+        List<Long> ids = orders.stream().map(OrderVO::id).toList();
+        String slots = String.join(",", Collections.nCopies(ids.size(), "?"));
+        Map<Long, List<OrderVO.Line>> linesByOrder = new HashMap<>();
+        jdbc.query("""
+                SELECT order_id,CASE WHEN dish_id IS NOT NULL THEN dish_id*2 ELSE setmeal_id*2+1 END AS item_id,
                        CASE WHEN dish_id IS NOT NULL THEN 'dish' ELSE 'setmeal' END AS kind,
-                       name,amount,number FROM order_detail WHERE order_id=? ORDER BY id
-                """, (row, index) -> new OrderVO.Line(row.getLong("item_id"), row.getString("name"),
-                row.getString("kind"), row.getBigDecimal("amount"), row.getInt("number")), id);
-        return Optional.of(new OrderVO(order.id(), order.number(), order.userId(), order.userName(),
-                order.status(), order.payStatus(), order.fulfillment(), order.amount(), order.createdAt(),
-                order.paidAt(), order.paymentDeadline(), order.recipient(), order.phone(), order.address(),
-                order.remark(), lines, order.events(), order.paymentChannel()));
+                       name,amount,number FROM order_detail WHERE order_id IN (
+                """ + slots + ") ORDER BY order_id,id", row -> {
+            var line = new OrderVO.Line(row.getLong("item_id"), row.getString("name"),
+                    row.getString("kind"), row.getBigDecimal("amount"), row.getInt("number"));
+            linesByOrder.computeIfAbsent(row.getLong("order_id"), ignored -> new ArrayList<>()).add(line);
+        }, ids.toArray());
+
+        return orders.stream().map(order -> new OrderVO(order.id(), order.number(), order.userId(),
+                order.userName(), order.status(), order.payStatus(), order.fulfillment(), order.amount(),
+                order.createdAt(), order.paidAt(), order.paymentDeadline(), order.recipient(), order.phone(),
+                order.address(), order.remark(), linesByOrder.getOrDefault(order.id(), List.of()),
+                order.events(), order.paymentChannel())).toList();
     }
 
     public Optional<OrderVO> replay(long userId, String key, String hash) {
@@ -170,19 +226,6 @@ public class OrderRepository {
 
     private OffsetDateTime time(LocalDateTime value) {
         return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
-    }
-
-    private String status(int code) {
-        return switch (code) {
-            case 1 -> "UNPAID";
-            case 2 -> "PREPARING";
-            case 3 -> "READY_DELIVERY";
-            case 4 -> "DELIVERING";
-            case 5 -> "COMPLETED";
-            case 6 -> "CANCELLED";
-            case 7 -> "READY_PICKUP";
-            default -> throw new IllegalStateException("订单状态不合法");
-        };
     }
 
     private String paymentStatus(int code) {

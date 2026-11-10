@@ -1,0 +1,8 @@
+.detail { padding: 24rpx; }
+.detail-card { background: #fff; border: 1rpx solid #dceaf5; border-radius: 14rpx; padding: 20rpx; margin-bottom: 14rpx; }
+.detail-title { display: block; font-size: 28rpx; font-weight: 700; }
+.detail-line, .detail-row { display: block; margin-top: 10rpx; font-size: 25rpx; overflow-wrap: anywhere; }
+.detail-row { display: flex; justify-content: space-between; gap: 12rpx; }
+.detail-error { color: #9a4235; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 10rpx; justify-content: flex-end; }
+.detail-actions button { margin: 0; }

@@ -1,0 +1,6 @@
+.orders { padding: 24rpx; }
+.order-filter, .order-card, .order-state { display: block; background: #fff; border: 1rpx solid #dceaf5; border-radius: 14rpx; padding: 20rpx; margin-bottom: 14rpx; }
+.order-filter, .order-status { color: #075e94; }
+.order-top { display: flex; align-items: center; justify-content: space-between; gap: 10rpx; font-size: 25rpx; font-weight: 700; }
+.order-time, .order-item { display: block; margin: 8rpx 0; color: #4c6b83; font-size: 24rpx; }
+.order-status { font-size: 22rpx; white-space: nowrap; }

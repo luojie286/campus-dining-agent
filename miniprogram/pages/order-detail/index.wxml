@@ -1,0 +1,29 @@
+<view class="detail">
+  <view wx:if="{{loading}}" class="detail-card">正在读取订单…</view>
+  <view wx:if="{{error}}" class="detail-card detail-error">{{error}} <button size="mini" bindtap="load" disabled="{{loading || busy}}">刷新状态</button></view>
+  <view wx:if="{{order}}" class="detail-card">
+    <text class="detail-title">{{order.statusLabel}}</text>
+    <text class="detail-line">{{order.number}} · {{order.createdLabel}}</text>
+    <text wx:if="{{order.status === 'UNPAID'}}" class="detail-line">支付截止 {{order.deadlineLabel}}</text>
+    <text class="detail-line">{{order.fulfillment === 'DELIVERY' ? '园区配送' : '到店自提'}} · {{order.address}}</text>
+    <text class="detail-line">{{order.recipient}} · {{order.phone}}</text>
+    <text wx:if="{{order.remark}}" class="detail-line">备注 {{order.remark}}</text>
+  </view>
+  <view wx:if="{{order}}" class="detail-card">
+    <text class="detail-title">商品明细</text>
+    <view wx:for="{{order.lines}}" wx:key="itemId" class="detail-row">
+      <text>{{item.name}} × {{item.quantity}}</text><text>¥{{item.price}}</text>
+    </view>
+    <text class="detail-line">订单金额 ¥{{order.amountLabel}}</text>
+  </view>
+  <view wx:if="{{order && order.events.length}}" class="detail-card">
+    <text class="detail-title">订单进度</text>
+    <text wx:for="{{order.events}}" wx:key="key" class="detail-line">{{item.timeLabel}} · {{item.note}}</text>
+  </view>
+  <view wx:if="{{order}}" class="detail-actions">
+    <button wx:if="{{order.status === 'UNPAID' && order.paymentChannel === 'MOCK'}}" size="mini"
+      type="primary" bindtap="pay" disabled="{{busy || loading}}">模拟支付</button>
+    <button wx:if="{{order.status === 'UNPAID'}}" size="mini" bindtap="cancel" disabled="{{busy || loading}}">取消订单</button>
+    <button size="mini" bindtap="reorder" disabled="{{busy || loading}}">再来一单</button>
+  </view>
+</view>

@@ -166,3 +166,23 @@ test('订单响应丢失时重试沿用原下单键', async () => {
   assert.equal(submits[0].header['Idempotency-Key'], submits[1].header['Idempotency-Key'])
   assert.deepEqual(submits[1].data, body)
 })
+
+test('历史订单保留筛选参数，再来一单失败后复用请求键', async () => {
+  let lost = true
+  const context = setup(options => {
+    if (options.url.endsWith('/wechat/login')) return loginResponse(options)
+    if (options.url.endsWith('/order/page')) return ok({ total: 0, records: [] })
+    if (lost) {
+      lost = false
+      throw new Error('响应丢失')
+    }
+    return ok([{ itemId: 2, quantity: 1 }])
+  })
+  const orders = require(path.join(services, 'orders'))
+  await orders.page({ page: 2, pageSize: 8, status: 'COMPLETED' })
+  assert.deepEqual(context.calls.at(-1).data, { page: 2, pageSize: 8, status: 'COMPLETED' })
+  await assert.rejects(orders.reorder(3), /无法连接后端/)
+  await orders.reorder(3)
+  const calls = context.calls.filter(call => call.url.endsWith('/order/3/reorder'))
+  assert.equal(calls[0].header['Idempotency-Key'], calls[1].header['Idempotency-Key'])
+})

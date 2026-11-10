@@ -1,6 +1,10 @@
 package com.sky.controller.user;
 
 import com.sky.dto.OrderSubmitDTO;
+import com.sky.dto.OrderPageQueryDTO;
+import com.sky.result.PageResult;
+import com.sky.vo.CartLineVO;
+import java.util.List;
 import com.sky.result.Result;
 import com.sky.service.UserOrderService;
 import com.sky.service.OrderLifecycleService;
@@ -28,6 +32,17 @@ public class UserOrderController {
             @RequestHeader(value = "Idempotency-Key", required = false) String key,
             @Valid @RequestBody OrderSubmitDTO body) {
         return Result.success(orders.submit(key, body));
+    }
+
+    @GetMapping("/page")
+    public Result<PageResult<OrderVO>> page(@Valid @ModelAttribute OrderPageQueryDTO query) {
+        return Result.success(orders.page(query));
+    }
+
+    @PostMapping("/{id}/reorder")
+    public Result<List<CartLineVO>> reorder(@PathVariable("id") long id,
+            @RequestHeader(value = "Idempotency-Key", required = false) String key) {
+        return Result.success(orders.reorder(id, key));
     }
 
     @GetMapping("/{id}")
