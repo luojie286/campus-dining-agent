@@ -2,7 +2,7 @@ import { API_MODE, download, readSession, request } from './http'
 import { mock } from './mock'
 import { initialPasswordError } from '@/domain/operatorPassword'
 import { menuFormError } from '@/domain/menuForm'
-import type { Address, AgentReply, CartLine, Category, CategoryPageQuery, Dashboard, ExportReportType, ListQuery, MenuItem, Operator, OperatorPageQuery, Order, OrderReport, Page, RevenueReport, Role, SalesReport, Session, Shop, UrgeReply, UserReport, Workbench } from '@/domain/types'
+import type { Address, AgentAction, AgentMessage, AgentReply, AgentSession, CartLine, Category, CategoryPageQuery, Dashboard, ExportReportType, ListQuery, MenuItem, Operator, OperatorPageQuery, Order, OrderReport, Page, RevenueReport, Role, SalesReport, Session, Shop, UrgeReply, UserReport, Workbench } from '@/domain/types'
 
 // 所有真实接口集中于此；API_CONTRACT.md 与此文件保持一致。
 const rolePath = () => readSession()?.role === 'admin' ? '/admin' : '/user'
@@ -148,6 +148,23 @@ export const api = {
   chat: (message: string, sessionId: string) => select(() => mock.chat(message, sessionId), () => request<AgentReply>('/agent/chat', 'POST', { message, sessionId })),
   confirmAction: (id: string) => select(() => mock.confirmAction(id), () => request<{ content: string }>(`/agent/actions/${encodeURIComponent(id)}/confirm`, 'POST', {})),
   cancelAction: (id: string) => select(() => mock.cancelAction(id), () => request<void>(`/agent/actions/${encodeURIComponent(id)}/cancel`, 'POST', {})),
+  // 真实模式的会话由 Redis 保存；演示模式沿用浏览器 sessionStorage，不伪造服务端会话。
+  agentSessions: (query: { page?: number; pageSize?: number } = {}) => select(
+    () => mock.agentSessions(),
+    () => request<Page<AgentSession>>('/agent/sessions/page', 'GET', undefined, { ...query })
+  ),
+  agentMessages: (sessionId: string) => select(
+    () => mock.agentMessages(),
+    () => request<Page<AgentMessage>>(`/agent/sessions/${encodeURIComponent(sessionId)}/messages`, 'GET', undefined, { page: 1, pageSize: 30 })
+  ),
+  deleteAgentSession: (sessionId: string) => select(
+    () => mock.deleteAgentSession(),
+    () => request<void>(`/agent/sessions/${encodeURIComponent(sessionId)}`, 'DELETE')
+  ),
+  agentAction: (id: string) => select(
+    () => mock.agentAction(id),
+    () => request<AgentAction>(`/agent/actions/${encodeURIComponent(id)}`)
+  ),
   resetDemo: () => {
     if (API_MODE !== 'mock') return Promise.reject(new Error('真实接口模式不能重置演示数据'))
     return mock.reset()

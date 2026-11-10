@@ -8,6 +8,8 @@ import com.sky.vo.SetmealVO;
 public interface SetmealService {
     PageResult<SetmealVO> pageQuery(SetmealPageQueryDTO dto);
     SetmealVO updateStatus(Long id, Integer status);
+
+    SetmealVO updateStatusIfCurrent(Long id, Integer status, Integer expectedStatus);
     SetmealVO getById(Long id);
     SetmealVO update(SetmealUpdateDTO dto);
     void delete(Long id);

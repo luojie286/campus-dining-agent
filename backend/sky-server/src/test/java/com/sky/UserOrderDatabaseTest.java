@@ -1,6 +1,10 @@
 package com.sky;
 
 import com.sky.util.JwtUtil;
+import com.sky.context.BaseContext;
+import com.sky.exception.ConflictException;
+import com.sky.service.AdminOrderService;
+import com.sky.service.SetmealService;
 import com.sky.task.OrderTimeoutTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -31,6 +36,8 @@ class UserOrderDatabaseTest {
     @Autowired private MockMvc mvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private JwtUtil jwt;
+    @Autowired private AdminOrderService adminOrders;
+    @Autowired private SetmealService setmeals;
     @Autowired private OrderTimeoutTask timeoutTask;
     private long user;
     private long dish;
@@ -270,6 +277,28 @@ class UserOrderDatabaseTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund WHERE order_id=?", Integer.class, id)).isEqualTo(1);
         assertThat(stock("dish", dish)).isEqualTo(2);
         assertThat(stock("setmeal", meal)).isEqualTo(3);
+    }
+
+    @Test
+    void agentBusinessGuardsRejectStalePreviewsAtWriteTime() throws Exception {
+        submit(address, "", 200);
+        long order = ownOrderId();
+        mvc.perform(post("/api/user/order/" + order + "/pay").header("token", token))
+                .andExpect(status().isOk());
+
+        String operator = operatorToken();
+        BaseContext.setCurrentId(Long.valueOf(jwt.parseToken(operator).getSubject()));
+        try {
+            assertThatThrownBy(() -> adminOrders.cancelUnpaidForAgent(order, "测试确认"))
+                    .isInstanceOf(ConflictException.class);
+            assertThatThrownBy(() -> setmeals.updateStatusIfCurrent(meal * 2 + 1, 0, 0))
+                    .isInstanceOf(ConflictException.class);
+        } finally {
+            BaseContext.removeCurrentId();
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id=?", Integer.class, order)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund WHERE order_id=?", Integer.class, order)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM setmeal WHERE id=?", Integer.class, meal)).isEqualTo(1);
     }
 
     private String operatorToken() {

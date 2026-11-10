@@ -109,6 +109,15 @@ public class AdminOrderService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public OrderVO cancel(long id, String reason) {
+        return cancelChecked(id, reason, false);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public OrderVO cancelUnpaidForAgent(long id, String reason) {
+        return cancelChecked(id, reason, true);
+    }
+
+    private OrderVO cancelChecked(long id, String reason, boolean expectUnpaid) {
         permissions.requireOperationsAccess();
         validateId(id);
 
@@ -121,6 +130,9 @@ public class AdminOrderService {
         }
 
         var current = state(id, true);
+        if (expectUnpaid && !current.unpaid()) {
+            throw new ConflictException("订单状态已变化，请重新预览并确认");
+        }
         if (current.status() == State.CANCELLED.code()) return order(id);
         if (!current.mock()) throw new ConflictException("微信订单需先确认关单或退款");
         if (current.unpaid()) {

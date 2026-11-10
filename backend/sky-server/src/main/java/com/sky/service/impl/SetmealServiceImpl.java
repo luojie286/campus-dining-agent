@@ -57,11 +57,24 @@ public class SetmealServiceImpl implements SetmealService {
     @Override
     @Transactional
     public SetmealVO updateStatus(Long itemId, Integer status) {
+        return updateStatusChecked(itemId, status, null);
+    }
+
+    @Override
+    @Transactional
+    public SetmealVO updateStatusIfCurrent(Long itemId, Integer status, Integer expectedStatus) {
+        return updateStatusChecked(itemId, status, expectedStatus);
+    }
+
+    private SetmealVO updateStatusChecked(Long itemId, Integer status, Integer expectedStatus) {
         permissionService.requireOperationsAccess();
         Long id = databaseId(itemId);
         LockedMeal locked = lockMeal(id, null, Set.of());
         if (locked == null) throw new NotFoundException("套餐不存在");
         Setmeal meal = locked.meal();
+        if (expectedStatus != null && !Objects.equals(meal.getStatus(), expectedStatus)) {
+            throw new ConflictException("套餐状态已变化，请重新预览并确认");
+        }
         // 已达到目标状态时不写审计；依赖变化不会暗改套餐自身status。
         if (Objects.equals(meal.getStatus(), status)) return toVO(meal, relations(id));
         if (status == 1) validateSale(meal.getCategoryId(), status, locked.parts(), locked.dishes());

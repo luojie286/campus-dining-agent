@@ -7,7 +7,7 @@ import { initialPasswordError } from '@/domain/operatorPassword'
 import { downloadCsv } from '@/utils/export'
 import type { CategoryPageQuery } from '@/domain/types'
 import type { OperatorPageQuery } from '@/domain/types'
-import type { ExportReportType, OrderReport, ReportStatusCounts, RevenueReport, SalesReport, UrgeReply, UserReport, Workbench } from '@/domain/types'
+import type { AgentAction, AgentMessage, AgentSession, ExportReportType, OrderReport, ReportStatusCounts, RevenueReport, SalesReport, UrgeReply, UserReport, Workbench } from '@/domain/types'
 
 const DATA_KEY = 'campus-demo-v1'
 let data: DemoData
@@ -457,6 +457,22 @@ export const mock = {
     action.cancelled = true
   },
   // 演示模式的对话留在浏览器 sessionStorage；这里提供结构兼容的空会话与本地确认状态。
+  async agentSessions(): Promise<Page<AgentSession>> {
+    return { total: 0, records: [] }
+  },
+  async agentMessages(): Promise<Page<AgentMessage>> {
+    return { total: 0, records: [] }
+  },
+  async deleteAgentSession(): Promise<void> { /* 演示数据由 clear() 在本地清理 */ },
+  async agentAction(id: string): Promise<AgentAction> {
+    const s = requireSession(); const action = actions.get(id)
+    if (!action || action.owner !== s.id || action.role !== s.role) throw new Error('确认记录不存在或不属于当前身份')
+    const state = action.executed ? 'SUCCESS' : action.cancelled ? 'CANCELLED'
+      : action.expiresAt <= Date.now() ? 'EXPIRED' : 'PENDING'
+    return { id, label: '演示确认操作', detail: '该记录保存在浏览器演示数据中，不写服务端数据库。',
+      expiresAt: new Date(action.expiresAt).toISOString(), state }
+  },
+  // 以下报表/工作台/催单/导出仅用于演示模式，统一从现有 metrics 口径派生，保证页面可用回退。
   async revenueReport(begin?: string, end?: string): Promise<RevenueReport> {
     const metrics = await mock.metrics(begin, end)
     const paidByDay = groupByDay(

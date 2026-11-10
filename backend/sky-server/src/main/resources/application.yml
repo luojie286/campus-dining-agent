@@ -38,9 +38,26 @@ sky:
     prefix: ${MENU_CACHE_PREFIX:campus:local:menu:catalog:v1}
   payment:
     channel: ${PAYMENT_CHANNEL:MOCK}
+  agent:
+    # 密钥只从环境变量注入；未配置时 /api/agent/chat 明确 503，不伪造模型结果。
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    enabled: ${AGENT_ENABLED:true}
+    model-timeout-ms: ${AGENT_MODEL_TIMEOUT_MS:5000}
+    total-budget-ms: ${AGENT_TOTAL_BUDGET_MS:15000}
+    max-model-calls: ${AGENT_MAX_MODEL_CALLS:5}
+    max-tool-calls: ${AGENT_MAX_TOOL_CALLS:8}
+    max-context-chars: ${AGENT_MAX_CONTEXT_CHARS:32000}
+    max-tool-result-chars: ${AGENT_MAX_TOOL_RESULT_CHARS:8000}
+    max-tool-result-rows: ${AGENT_MAX_TOOL_RESULT_ROWS:20}
+    session-ttl-hours: ${AGENT_SESSION_TTL_HOURS:24}
+    max-visible-messages: ${AGENT_MAX_VISIBLE_MESSAGES:30}
+    action-ttl-minutes: ${AGENT_ACTION_TTL_MINUTES:5}
   ws:
     # 生产环境按实际域名收紧，并通过 Nginx 代理 Upgrade/Connection 使用 WSS。
     ticket-prefix: ${WS_TICKET_PREFIX:campus:local:ws:ticket}
     allowed-origins: "${WS_ALLOWED_ORIGINS:http://127.0.0.1:[*],http://localhost:[*]}"
   orders:
     timeout-task-enabled: ${ORDER_TIMEOUT_TASK_ENABLED:true}
+    housekeeping-task-enabled: ${ORDER_HOUSEKEEPING_TASK_ENABLED:true}

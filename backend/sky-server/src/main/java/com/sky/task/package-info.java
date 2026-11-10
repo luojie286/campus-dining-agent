@@ -1,2 +1,2 @@
-/** TODO：添加定时任务。@EnableScheduling 已开启，未实现任何业务任务。 */
+/** 定时任务：支付超时关单（OrderTimeoutTask）与过期确认记录清理（HousekeepingTask）。 */
 package com.sky.task;

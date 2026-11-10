@@ -102,6 +102,16 @@ export interface PendingAction { id: string; label: string; detail: string; expi
 export interface AgentReply { sessionId: string; content: string; items?: MenuItem[]; orders?: Order[]; metrics?: Dashboard; traces: ToolTrace[]; action?: PendingAction }
 export interface ChatMessage extends Partial<AgentReply> { id: string; role: 'user' | 'assistant'; content: string; actionState?: 'confirmed' | 'cancelled' }
 
+// Agent 会话与确认记录：会话归当前登录身份，服务端不返回他人记录。
+export interface AgentSession { id: string; title: string; createdAt: string; updatedAt: string }
+export interface AgentMessage {
+  id: string; role: 'user' | 'assistant'; content: string; createdAt: string; reply?: AgentReply
+}
+export type AgentActionState = 'PENDING' | 'EXECUTING' | 'SUCCESS' | 'CANCELLED' | 'EXPIRED' | 'FAILED'
+export interface AgentAction {
+  id: string; label: string; detail: string; expiresAt: string
+  state: AgentActionState; result?: string
+}
 export const statusLabels: Record<OrderStatus, string> = {
   UNPAID: '待支付', PREPARING: '制作中', READY_DELIVERY: '待配送', DELIVERING: '配送中',
   READY_PICKUP: '待自提', COMPLETED: '已完成', CANCELLED: '已取消'
