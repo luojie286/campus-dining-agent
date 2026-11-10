@@ -33,6 +33,39 @@ Page({
   chooseAddress(event) { this.setData({ addressIndex: Number(event.detail.value) }) },
   changeRemark(event) { this.setData({ remark: event.detail.value }) },
 
+  payMock() {
+    return this.changeOrder(order => orders.payMock(order.id))
+  },
+
+  confirmCancel() {
+    if (this.data.busy || this.data.order?.status !== 'UNPAID') return
+    wx.showModal({
+      title: '取消未支付订单',
+      content: '取消后将释放本次订单的预占库存。',
+      success: result => {
+        if (result.confirm) this.changeOrder(order => orders.cancel(order.id))
+      }
+    })
+  },
+
+  async changeOrder(action) {
+    const order = this.data.order
+    if (this.data.busy || !order || order.status !== 'UNPAID') return
+    this.setData({ busy: true, error: '' })
+    try {
+      this.setData({ order: await action(order) })
+    } catch (error) {
+      this.setData({ error: error.message || '订单操作失败，请重试' })
+      try {
+        this.setData({ order: await orders.detail(order.id) })
+      } catch {
+        // 保留原操作错误，用户可以再次尝试。
+      }
+    } finally {
+      this.setData({ busy: false })
+    }
+  },
+
   async submit() {
     if (this.data.busy || this.data.order || this.data.loading) return
     const { fulfillment, remark, addressIndex } = this.data

@@ -36,3 +36,7 @@ sky:
     app-secret: ${WECHAT_APP_SECRET:}
   menu-cache:
     prefix: ${MENU_CACHE_PREFIX:campus:local:menu:catalog:v1}
+  payment:
+    channel: ${PAYMENT_CHANNEL:MOCK}
+  orders:
+    timeout-task-enabled: ${ORDER_TIMEOUT_TASK_ENABLED:true}

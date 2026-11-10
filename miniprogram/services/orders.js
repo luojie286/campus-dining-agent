@@ -18,4 +18,16 @@ function detail(id) {
   return request('/api/user/order/' + id)
 }
 
-module.exports = { submit, detail }
+function payMock(id) {
+  return request('/api/user/order/' + id + '/pay', 'POST')
+}
+
+function cancel(id) {
+  return request('/api/user/order/' + id + '/cancel', 'POST')
+}
+
+function payment(id) {
+  return request('/api/user/order/' + id + '/payment')
+}
+
+module.exports = { submit, detail, payMock, cancel, payment }

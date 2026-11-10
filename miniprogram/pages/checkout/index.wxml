@@ -1,9 +1,16 @@
 <view class="checkout">
   <view wx:if="{{order}}" class="checkout-card">
-    <text class="checkout-title">订单已创建 · 待支付</text>
+    <text class="checkout-title">{{order.status === 'UNPAID' ? '订单已创建 · 待支付' : order.status === 'CANCELLED' ? '订单已取消' : '订单已支付'}}</text>
     <text class="checkout-line">订单号 {{order.number}}</text>
     <text class="checkout-line">金额 ¥{{order.amount}}</text>
-    <text class="checkout-line">支付截止 {{deadline}}</text>
+    <text wx:if="{{order.status === 'UNPAID'}}" class="checkout-line">支付截止 {{deadline}}</text>
+    <view wx:if="{{order.status === 'UNPAID'}}" class="checkout-actions">
+      <button wx:if="{{order.paymentChannel === 'MOCK'}}" size="mini" type="primary"
+        bindtap="payMock" disabled="{{busy}}">模拟支付</button>
+      <button size="mini" bindtap="confirmCancel" disabled="{{busy}}">取消订单</button>
+    </view>
+    <text wx:if="{{order.paymentChannel === 'MOCK'}}" class="checkout-line">模拟支付不会扣款。</text>
+    <view wx:if="{{error}}" class="checkout-error">{{error}}</view>
     <text class="checkout-line">{{order.address}}</text>
     <navigator class="checkout-link" url="/pages/menu/index" open-type="reLaunch">返回菜单</navigator>
   </view>

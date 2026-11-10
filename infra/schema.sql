@@ -175,6 +175,7 @@ CREATE TABLE `orders` (
   `payment_deadline` datetime NOT NULL COMMENT '支付截止时间',
   `checkout_time` datetime DEFAULT NULL COMMENT '成功付款时间',
   `pay_status` tinyint NOT NULL DEFAULT 0 COMMENT '0未支付，1已支付，2已退款；当前为学习模拟流程',
+  `payment_channel` varchar(16) NOT NULL DEFAULT 'MOCK' COMMENT '实际支付渠道：MOCK或WECHAT',
   `amount` decimal(10,2) NOT NULL COMMENT '成交总额，元',
   `remark` varchar(500) NOT NULL DEFAULT '',
   `phone` varchar(32) NOT NULL COMMENT '收餐电话快照',

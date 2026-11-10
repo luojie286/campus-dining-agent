@@ -7,6 +7,7 @@ import com.sky.entity.User;
 import com.sky.exception.BadRequestException;
 import com.sky.exception.ConflictException;
 import com.sky.exception.NotFoundException;
+import com.sky.exception.ServiceUnavailableException;
 import com.sky.mapper.AddressBookRepository;
 import com.sky.mapper.OrderRepository;
 import com.sky.mapper.ShopMapper;
@@ -15,6 +16,7 @@ import com.sky.mapper.UserMapper;
 import com.sky.vo.AddressVO;
 import com.sky.vo.CartLineVO;
 import com.sky.vo.OrderVO;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,10 +52,12 @@ public class UserOrderService {
     private final OrderRepository orders;
     private final MenuPageCache menuCache;
     private final Clock clock;
+    private final PaymentChannel paymentChannel;
 
     public UserOrderService(UserTransactionLock users, UserMapper userMapper, ShopMapper shops,
             AddressBookRepository addresses, ShoppingCartRepository carts, CartCatalogValidator catalog,
-            OrderRepository orders, MenuPageCache menuCache, Clock clock) {
+            OrderRepository orders, MenuPageCache menuCache, Clock clock,
+            @Value("${sky.payment.channel:MOCK}") PaymentChannel paymentChannel) {
         this.users = users;
         this.userMapper = userMapper;
         this.shops = shops;
@@ -63,6 +67,7 @@ public class UserOrderService {
         this.orders = orders;
         this.menuCache = menuCache;
         this.clock = clock;
+        this.paymentChannel = paymentChannel;
     }
 
     @Transactional
@@ -79,6 +84,9 @@ public class UserOrderService {
         String hash = requestHash(dto, remark);
         var previous = orders.replay(userId, key, hash);
         if (previous.isPresent()) return previous.get();
+        if (paymentChannel == PaymentChannel.WECHAT) {
+            throw new ServiceUnavailableException("微信支付暂不可用，暂不能创建订单");
+        }
 
         Shop shop = shops.selectForOrder(1L);
         if (shop == null || !Integer.valueOf(1).equals(shop.getStatus())) {
@@ -116,7 +124,7 @@ public class UserOrderService {
         var events = List.of(new OrderVO.Event("UNPAID", now, "创建订单，预占库存"));
         OrderVO draft = new OrderVO(0, number, userId, user.getName(), "UNPAID", "UNPAID",
                 dto.getFulfillment(), amount, now, null, now.plusMinutes(15), recipient.name(),
-                recipient.phone(), recipient.address(), remark, detail, events);
+                recipient.phone(), recipient.address(), remark, detail, events, paymentChannel.name());
 
         orders.deductStock(allocation.stock());
         long id = orders.insert(draft, dto.getAddressId(), allocation.stock());

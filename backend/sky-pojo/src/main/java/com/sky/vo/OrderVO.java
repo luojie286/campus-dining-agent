@@ -11,7 +11,7 @@ public record OrderVO(long id, String number, long userId, String userName,
                       String status, String payStatus, String fulfillment, BigDecimal amount,
                       OffsetDateTime createdAt, OffsetDateTime paidAt, OffsetDateTime paymentDeadline,
                       String recipient, String phone, String address, String remark,
-                      List<Line> lines, List<Event> events) {
+                      List<Line> lines, List<Event> events, String paymentChannel) {
     public record Line(long itemId, String name, String kind, BigDecimal price, int quantity) {}
     public record Event(String status, OffsetDateTime time, String note) {}
 }

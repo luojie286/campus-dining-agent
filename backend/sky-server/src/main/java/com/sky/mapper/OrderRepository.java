@@ -51,8 +51,8 @@ public class OrderRepository {
         int inserted = jdbc.update(connection -> {
             var sql = connection.prepareStatement("""
                     INSERT INTO orders(number,user_id,address_book_id,fulfillment,order_time,payment_deadline,
-                      amount,remark,phone,address,user_name,consignee,inventory_snapshot,events,status,pay_status)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0)
+                      amount,remark,phone,address,user_name,consignee,inventory_snapshot,events,status,pay_status,payment_channel)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?)
                     """, Statement.RETURN_GENERATED_KEYS);
             sql.setString(1, order.number());
             sql.setLong(2, order.userId());
@@ -68,6 +68,7 @@ public class OrderRepository {
             sql.setString(12, order.recipient());
             sql.setString(13, inventoryJson);
             sql.setString(14, eventsJson);
+            sql.setString(15, order.paymentChannel());
             return sql;
         }, keys);
         Number key = keys.getKey();
@@ -88,7 +89,7 @@ public class OrderRepository {
     public Optional<OrderVO> findOwned(long userId, long id) {
         var orders = jdbc.query("""
                 SELECT id,number,user_id,user_name,status,pay_status,fulfillment,amount,order_time,
-                       checkout_time,payment_deadline,consignee,phone,address,remark,events
+                       checkout_time,payment_deadline,consignee,phone,address,remark,events,payment_channel
                 FROM orders WHERE user_id=? AND id=?
                 """, (row, index) -> new OrderVO(
                 row.getLong("id"), row.getString("number"), row.getLong("user_id"), row.getString("user_name"),
@@ -97,7 +98,7 @@ public class OrderRepository {
                 time(row.getObject("checkout_time", LocalDateTime.class)),
                 time(row.getObject("payment_deadline", LocalDateTime.class)), row.getString("consignee"),
                 row.getString("phone"), row.getString("address"), row.getString("remark"),
-                List.of(), events(row.getString("events"))), userId, id);
+                List.of(), events(row.getString("events")), row.getString("payment_channel")), userId, id);
         if (orders.isEmpty()) return Optional.empty();
 
         OrderVO order = orders.getFirst();
@@ -110,7 +111,7 @@ public class OrderRepository {
         return Optional.of(new OrderVO(order.id(), order.number(), order.userId(), order.userName(),
                 order.status(), order.payStatus(), order.fulfillment(), order.amount(), order.createdAt(),
                 order.paidAt(), order.paymentDeadline(), order.recipient(), order.phone(), order.address(),
-                order.remark(), lines, order.events()));
+                order.remark(), lines, order.events(), order.paymentChannel()));
     }
 
     public Optional<OrderVO> replay(long userId, String key, String hash) {
@@ -124,9 +125,17 @@ public class OrderRepository {
             throw new ConflictException("同一幂等键不能用于不同的下单请求");
         }
         try {
-            return Optional.of(json.readerFor(OrderVO.class)
+            OrderVO order = json.readerFor(OrderVO.class)
                     .without(DeserializationFeature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
-                    .readValue(previous.response()));
+                    .readValue(previous.response());
+            if (order.paymentChannel() == null) {
+                // 迁移前只存在模拟支付订单，旧幂等快照也采用这个渠道。
+                order = new OrderVO(order.id(), order.number(), order.userId(), order.userName(),
+                        order.status(), order.payStatus(), order.fulfillment(), order.amount(),
+                        order.createdAt(), order.paidAt(), order.paymentDeadline(), order.recipient(),
+                        order.phone(), order.address(), order.remark(), order.lines(), order.events(), "MOCK");
+            }
+            return Optional.of(order);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("下单幂等记录无法读取", exception);
         }
