@@ -11,10 +11,13 @@ test-results/
 application-private.yml
 .idea/
 *.iml
+.vscode/
 
 # Local agent instructions
 /AGENTS.md
 /agent.md
+/.workbuddy/
+/.ven.local
 
 # Local development documentation and reference material
 /docs/
