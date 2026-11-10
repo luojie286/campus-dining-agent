@@ -9,10 +9,11 @@ function createError(message, statusCode) {
   return error
 }
 
-function send(path, method, data, token) {
+function send(path, method, data, token, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const header = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...extraHeaders
     }
     if (token) header.token = token
 
@@ -98,11 +99,11 @@ async function getToken() {
   }
 }
 
-async function request(path, method = 'GET', data = {}) {
+async function request(path, method = 'GET', data = {}, headers = {}) {
   const token = await getToken()
 
   try {
-    return await send(path, method, data, token)
+    return await send(path, method, data, token, headers)
   } catch (error) {
     if (error.statusCode !== 401) throw error
 
@@ -112,7 +113,7 @@ async function request(path, method = 'GET', data = {}) {
 
     const newToken = await getToken()
     try {
-      return await send(path, method, data, newToken)
+      return await send(path, method, data, newToken, headers)
     } catch (retryError) {
       if (retryError.statusCode === 401 && sessionToken === newToken) sessionToken = ''
       throw retryError

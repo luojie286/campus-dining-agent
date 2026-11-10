@@ -1,0 +1,39 @@
+<view class="address-page">
+  <view class="address-header"><text>园区收餐地址</text>
+    <button size="mini" type="primary" bindtap="createAddress" disabled="{{busy}}">新增地址</button>
+  </view>
+  <view wx:if="{{error}}" class="address-state">{{error}}
+    <button size="mini" bindtap="load" disabled="{{loading}}">重试</button>
+  </view>
+  <view wx:if="{{loading}}" class="address-state">正在读取地址…</view>
+  <view wx:elif="{{!addresses.length && !error}}" class="address-state">还没有收餐地址</view>
+  <view wx:for="{{addresses}}" wx:key="id" class="address-card">
+    <view class="address-title">
+      <text>{{item.building}} {{item.detail}}</text>
+      <text wx:if="{{item.isDefault}}" class="address-default">默认</text>
+    </view>
+    <text class="address-contact">{{item.consignee}} · {{item.phone}}</text>
+    <view class="address-actions">
+      <button wx:if="{{!item.isDefault}}" size="mini" bindtap="makeDefault" data-id="{{item.id}}" disabled="{{busy || loading}}">设为默认</button>
+      <button size="mini" bindtap="editAddress" data-id="{{item.id}}" disabled="{{busy || loading}}">编辑</button>
+      <button size="mini" bindtap="confirmRemove" data-id="{{item.id}}" disabled="{{busy || loading}}">删除</button>
+    </view>
+  </view>
+
+  <view wx:if="{{draft}}" class="address-overlay">
+    <view class="address-backdrop" bindtap="closeForm"></view>
+    <view class="address-sheet">
+      <text class="address-title">{{draft.id ? '编辑地址' : '新增地址'}}</text>
+      <input value="{{draft.consignee}}" data-field="consignee" maxlength="30" bindinput="changeField" placeholder="收餐人" disabled="{{busy}}" />
+      <input value="{{draft.phone}}" data-field="phone" maxlength="11" type="number" bindinput="changeField" placeholder="手机号" disabled="{{busy}}" />
+      <input value="{{draft.building}}" data-field="building" maxlength="50" bindinput="changeField" placeholder="园区楼栋" disabled="{{busy}}" />
+      <input value="{{draft.detail}}" data-field="detail" maxlength="100" bindinput="changeField" placeholder="楼层与房间" disabled="{{busy}}" />
+      <view class="address-switch"><text>设为默认地址</text><switch color="#0876ba" checked="{{draft.isDefault}}" bindchange="changeDefault" disabled="{{busy}}" /></view>
+      <text wx:if="{{formError}}" class="address-error">{{formError}}</text>
+      <view class="address-actions">
+        <button size="mini" bindtap="closeForm" disabled="{{busy}}">取消</button>
+        <button size="mini" type="primary" bindtap="save" disabled="{{busy}}">保存</button>
+      </view>
+    </view>
+  </view>
+</view>

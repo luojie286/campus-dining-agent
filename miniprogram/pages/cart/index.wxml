@@ -1,0 +1,22 @@
+<view class="cart">
+  <navigator class="cart-address" url="/pages/addresses/index">管理收餐地址 ›</navigator>
+  <view class="cart-heading">
+    <text>已选商品</text>
+    <button size="mini" bindtap="confirmClear" disabled="{{busy || loading || !rows.length}}">清空</button>
+  </view>
+  <view wx:if="{{error}}" class="cart-notice">
+    {{error}}
+    <button size="mini" bindtap="load" disabled="{{busy || loading}}">重试读取</button>
+  </view>
+  <view wx:if="{{catalogWarning}}" class="cart-notice">{{catalogWarning}}</view>
+  <view wx:if="{{loading}}" class="cart-state">正在读取购物车…</view>
+  <view wx:elif="{{!rows.length && !error}}" class="cart-state">购物车暂无商品</view>
+  <view wx:for="{{rows}}" wx:key="itemId" class="cart-row">
+    <view class="cart-product">
+      <text class="cart-name">{{item.name}}</text>
+      <text class="cart-meta">数量 × {{item.quantity}}<text wx:if="{{item.subtotal}}"> · ¥{{item.subtotal}}</text></text>
+      <text wx:if="{{item.unavailable}}" class="cart-unavailable">暂不可售或库存不足</text>
+    </view>
+    <button size="mini" bindtap="remove" data-id="{{item.itemId}}" disabled="{{busy || loading}}">移除</button>
+  </view>
+</view>

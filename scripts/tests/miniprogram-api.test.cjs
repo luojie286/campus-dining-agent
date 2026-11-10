@@ -7,7 +7,7 @@ const shop = { name: '接口测试食堂', open: true, openingHours: '11:00–13
 const ok = data => ({ statusCode: 200, data: { code: 1, data } })
 
 function setup(handler) {
-  for (const name of ['menu', 'request', 'api-menu', 'mock-menu', 'config']) {
+  for (const name of ['menu', 'request', 'api-menu', 'mock-menu', 'config', 'cart']) {
     delete require.cache[require.resolve(path.join(services, name))]
   }
   let logins = 0
@@ -124,4 +124,26 @@ test('显式演示模式不调用wx登录和HTTP', async () => {
   assert.equal(context.loginCount(), 0)
   assert.equal(context.calls.length, 0)
   config.mode = 'api'
+})
+
+test('加购连接超时后复用幂等键，成功后的新点击使用新键', async () => {
+  let failOnce = true
+  const context = setup(options => {
+    if (options.url.endsWith('/wechat/login')) return loginResponse(options)
+    if (failOnce) {
+      failOnce = false
+      throw new Error('响应丢失')
+    }
+    return ok([{ itemId: 2, quantity: 1 }])
+  })
+  const cart = require(path.join(services, 'cart'))
+  await assert.rejects(cart.add(2), /无法连接后端/)
+  await cart.add(2)
+  await cart.add(2)
+  const requests = context.calls.filter(call => call.url.endsWith('/shoppingCart/add'))
+  const keys = requests.map(call => call.header['Idempotency-Key'])
+  assert.equal(keys[0], keys[1])
+  assert.notEqual(keys[1], keys[2])
+  assert.match(keys[0], /^[A-Za-z0-9_-]{16,64}$/)
+  assert.deepEqual(requests[0].data, { itemId: 2, quantity: 1 })
 })

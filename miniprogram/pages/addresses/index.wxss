@@ -1,0 +1,17 @@
+.address-page { padding: 24rpx; }
+.address-header, .address-title, .address-actions, .address-switch { display: flex; align-items: center; gap: 12rpx; }
+.address-header, .address-switch { justify-content: space-between; }
+.address-header { font-size: 32rpx; font-weight: 700; margin-bottom: 20rpx; }
+.address-page button { margin: 0; }
+.address-card, .address-state { background: #fff; border: 1rpx solid #dceaf5; padding: 20rpx; border-radius: 14rpx; margin-bottom: 14rpx; }
+.address-title { font-size: 28rpx; font-weight: 700; overflow-wrap: anywhere; }
+.address-default { font-size: 20rpx; color: #075e94; background: #e2f2ff; padding: 4rpx 8rpx; border-radius: 6rpx; flex-shrink: 0; }
+.address-contact { display: block; margin: 10rpx 0; color: #4c6b83; font-size: 23rpx; }
+.address-actions { justify-content: flex-end; }
+.address-overlay, .address-backdrop { position: fixed; inset: 0; }
+.address-overlay { display: flex; align-items: flex-end; z-index: 4; }
+.address-backdrop { background: #12334a66; }
+.address-sheet { box-sizing: border-box; width: 100%; background: #fff; border-radius: 24rpx 24rpx 0 0; padding: 24rpx; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); z-index: 1; }
+.address-sheet input { background: #f2f8fd; margin: 14rpx 0; padding: 12rpx; border-radius: 10rpx; font-size: 26rpx; }
+.address-switch { font-size: 24rpx; margin: 12rpx 0; }
+.address-error { display: block; color: #9a4235; font-size: 23rpx; padding-bottom: 12rpx; }

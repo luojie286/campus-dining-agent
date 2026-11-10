@@ -1,6 +1,8 @@
 const { createMenuSource, scenes } = require('../../services/menu')
 const config = require('../../services/config')
 
+const cart = require('../../services/cart')
+
 const PAGE_SIZE = 6
 const ALL_CATEGORY = { id: 0, name: '全部商品' }
 const FOOD_ART = ['chicken', 'fish', 'beef', 'salad', 'noodle']
@@ -32,6 +34,7 @@ Component({
     refreshing: false,
     error: '',
     detail: null,
+    adding: false,
     scrollTarget: '',
     scenes,
     sceneIndex: 0,
@@ -51,6 +54,27 @@ Component({
   },
 
   methods: {
+    openCart() {
+      if (this.data.adding) return
+      wx.navigateTo({ url: '/pages/cart/index' })
+    },
+
+    async addToCart(event) {
+      if (this.data.adding) return
+      const itemId = Number(event.currentTarget.dataset.id)
+      const item = this.data.products.find(product => product.id === itemId)
+      if (!item || item.soldOut) return
+      this.setData({ adding: true })
+      try {
+        await cart.add(itemId)
+        wx.showToast({ title: '已加入购物车', icon: 'success' })
+      } catch (error) {
+        wx.showToast({ title: error.message || '加购失败，请重试', icon: 'none' })
+      } finally {
+        this.setData({ adding: false })
+      }
+    },
+
     async loadStore(categoryId, refreshing = false) {
       const version = this.startQuery(refreshing)
       this.setData({ shop: null, categories: [ALL_CATEGORY] })

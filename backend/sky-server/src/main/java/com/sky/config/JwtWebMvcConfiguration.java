@@ -34,7 +34,11 @@ public class JwtWebMvcConfiguration implements WebMvcConfigurer {
                 .addPathPatterns(
                         "/api/user/category/**",
                         "/api/user/shop",
-                        "/api/user/menu/page"
+                        "/api/user/menu/page",
+                        "/api/user/shoppingCart",
+                        "/api/user/shoppingCart/**",
+                        "/api/user/addressBook",
+                        "/api/user/addressBook/**"
                 );
     }
 }

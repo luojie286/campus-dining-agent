@@ -25,9 +25,12 @@
   <view class="menu-panel">
     <view class="menu-toolbar">
       <view class="menu-heading"><view class="heading-mark"></view><text>店内点餐</text></view>
+      <view class="menu-actions">
       <picker wx:if="{{isDemo}}" class="scene-control" mode="selector" range="{{scenes}}" range-key="label" value="{{sceneIndex}}" bindchange="changeScene">
         <view class="scene-picker"><text>演示 · {{scenes[sceneIndex].label}}</text><view class="chevron"></view></view>
       </picker>
+        <button class="cart-link" bindtap="openCart">购物车</button>
+      </view>
     </view>
 
     <view class="menu-columns">
@@ -134,6 +137,8 @@
       <view class="detail-footer">
         <view class="dish-price"><text class="yuan">¥</text>{{detail.priceText}}</view>
         <text class="detail-stock {{detail.soldOut ? 'stock-empty' : ''}}">{{detail.soldOut ? '今日售罄' : detail.availableStock + ' 份可售'}}</text>
+        <button class="cart-link" catchtap="addToCart" data-id="{{detail.id}}"
+          disabled="{{detail.soldOut || adding}}">{{adding ? '添加中…' : '加入购物车'}}</button>
       </view>
     </view>
   </view>

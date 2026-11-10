@@ -1,0 +1,12 @@
+.cart { padding: 24rpx; }
+.cart-heading, .cart-row { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.cart-heading { font-size: 33rpx; font-weight: 700; margin-bottom: 22rpx; }
+.cart-heading button, .cart-row button, .cart-notice button { margin: 0; color: #075e94; background: #e2f2ff; }
+.cart-row { border: 1rpx solid #dceaf5; border-radius: 16rpx; padding: 20rpx; background: #fff; margin-bottom: 12rpx; }
+.cart-product { min-width: 0; }
+.cart-name, .cart-meta, .cart-unavailable { display: block; }
+.cart-name { font-size: 27rpx; font-weight: 700; overflow-wrap: anywhere; }
+.cart-meta, .cart-unavailable { font-size: 23rpx; color: #4c6b83; margin-top: 5rpx; }
+.cart-unavailable, .cart-notice { color: #9a4235; }
+.cart-notice, .cart-state { padding: 23rpx; margin-bottom: 12rpx; background: #fff; border-radius: 12rpx; font-size: 25rpx; }
+.cart-address { display: block; color: #075e94; padding-bottom: 20rpx; font-size: 25rpx; }

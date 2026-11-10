@@ -1,6 +1,8 @@
 {
   "pages": [
-    "pages/menu/index"
+    "pages/menu/index",
+    "pages/cart/index",
+    "pages/addresses/index"
   ],
   "window": {
     "navigationBarTitleText": "园味 · 园区点餐",
