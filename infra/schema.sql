@@ -219,6 +219,15 @@ CREATE TABLE `order_refund` (
     UNIQUE KEY `uk_order_refund_number` (`refund_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 客户催单计数；已有库使用 infra/migration/006_order_urge.sql 升级。
+CREATE TABLE `order_urge` (
+    `order_id` BIGINT NOT NULL COMMENT '订单ID',
+    `urge_count` INT NOT NULL DEFAULT 0 COMMENT '累计催单次数，最多5次',
+    `last_urge_at` DATETIME NULL COMMENT '最后一次成功催单时间，用于60秒冷却',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 11. 名称、单价、数量都是成交快照，不受当前商品修改影响。
 CREATE TABLE `order_detail` (
   `id` bigint NOT NULL AUTO_INCREMENT,

@@ -8,9 +8,11 @@ import java.util.List;
 import com.sky.result.Result;
 import com.sky.service.UserOrderService;
 import com.sky.service.OrderLifecycleService;
+import com.sky.service.OrderUrgeService;
 import com.sky.vo.PaymentStatusVO;
 import com.sky.vo.RefundVO;
 import com.sky.vo.OrderVO;
+import com.sky.vo.UrgeReplyVO;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
@@ -23,9 +25,13 @@ public class UserOrderController {
 
     private final OrderLifecycleService lifecycle;
 
-    public UserOrderController(UserOrderService orders, OrderLifecycleService lifecycle) {
+    private final OrderUrgeService urges;
+
+    public UserOrderController(UserOrderService orders, OrderLifecycleService lifecycle,
+            OrderUrgeService urges) {
         this.orders = orders;
         this.lifecycle = lifecycle;
+        this.urges = urges;
     }
 
     @PostMapping("/submit")
@@ -64,6 +70,11 @@ public class UserOrderController {
     @PostMapping("/{id}/cancel")
     public Result<OrderVO> cancel(@PathVariable("id") long id) {
         return Result.success(lifecycle.cancel(id));
+    }
+
+    @PostMapping("/{id}/urge")
+    public Result<UrgeReplyVO> urge(@PathVariable("id") long id) {
+        return Result.success(urges.urge(id));
     }
     @GetMapping("/{id}/refund")
     public Result<RefundVO> refund(@PathVariable("id") long id) {

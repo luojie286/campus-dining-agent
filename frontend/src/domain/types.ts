@@ -42,6 +42,13 @@ export interface Dashboard {
   sales: { id: number; name: string; quantity: number; amount: number }[]
   period: { begin: string; end: string }; metricNote: string
 }
+export interface WsTicket { ticket: string; expiresAt?: string }
+export interface WebSocketOrderMessage {
+  eventId: string; type: 'NEW_ORDER' | 'ORDER_STATUS_CHANGED' | 'ORDER_URGED'
+  orderId: number; orderNumber: string; occurredAt: string
+  status?: OrderStatus; urgeCount?: number
+}
+
 export interface Page<T> { total: number; records: T[] }
 export interface OperatorPageQuery { page?: number; pageSize?: number; name?: string; status?: 0 | 1 }
 export interface ListQuery { name?: string; status?: string | number; categoryId?: number; page?: number; pageSize?: number; begin?: string; end?: string }

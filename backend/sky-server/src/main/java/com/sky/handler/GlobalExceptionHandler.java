@@ -21,6 +21,10 @@ import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import com.sky.exception.NotFoundException;
 import com.sky.exception.ServiceUnavailableException;
+import com.sky.exception.TooManyRequestsException;
+import com.sky.exception.UnauthorizedException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -30,6 +34,21 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public Result<Void> serviceUnavailable(ServiceUnavailableException exception) {
         return Result.error(exception.getMessage());
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> unauthorized(UnauthorizedException exception) {
+        return Result.error(exception.getMessage());
+    }
+
+    /** 催单冷却返回 429，Retry-After 用秒数告诉客户端何时可以重试。 */
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<Result<Void>> tooManyRequests(TooManyRequestsException exception) {
+        int retryAfter = Math.max(1, exception.getRetryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter))
+                .body(Result.error(exception.getMessage()));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -12,6 +12,7 @@ import com.sky.mapper.OrderRefundRepository;
 import com.sky.vo.RefundVO;
 import com.sky.vo.OrderVO;
 import com.sky.vo.PaymentStatusVO;
+import com.sky.websocket.OrderEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -33,10 +34,12 @@ public class OrderLifecycleService {
     private final MenuPageCache menuCache;
     private final Clock clock;
     private final PaymentChannel paymentChannel;
+    private final OrderEventPublisher events;
 
     public OrderLifecycleService(UserTransactionLock users, OrderRepository orders,
             OrderLifecycleRepository lifecycle, OrderRefundRepository refunds, MenuPageCache menuCache, Clock clock,
-            @Value("${sky.payment.channel:MOCK}") PaymentChannel paymentChannel) {
+            @Value("${sky.payment.channel:MOCK}") PaymentChannel paymentChannel,
+            OrderEventPublisher events) {
         this.users = users;
         this.orders = orders;
         this.refunds = refunds;
@@ -44,6 +47,7 @@ public class OrderLifecycleService {
         this.menuCache = menuCache;
         this.clock = clock;
         this.paymentChannel = paymentChannel;
+        this.events = events;
     }
 
     @Transactional
@@ -60,7 +64,10 @@ public class OrderLifecycleService {
             throw new ConflictException("订单已过期或不能支付");
         }
         lifecycle.markMockPaid(order, now);
-        return findOwned(userId, id);
+        OrderVO paid = findOwned(userId, id);
+        // 合同规定：付款成功进入制作中才提醒运营，创建未支付订单不提醒。
+        events.publishAfterCommit("NEW_ORDER", paid, null);
+        return paid;
     }
 
     @Transactional(readOnly = true)
@@ -122,6 +129,9 @@ public class OrderLifecycleService {
         lifecycle.markCancelled(order, now, reason);
         lifecycle.releaseStock(stock);
         menuCache.invalidateAfterCommit();
+        OrderVO cancelled = orders.findAny(order.id())
+                .orElseThrow(() -> new IllegalStateException("取消后的订单不存在"));
+        events.publishAfterCommit("ORDER_STATUS_CHANGED", cancelled, null);
     }
 
     private boolean expiredMock(State order, OffsetDateTime now) {

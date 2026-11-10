@@ -13,6 +13,7 @@ import com.sky.mapper.OrderRepository;
 import com.sky.result.PageResult;
 import com.sky.vo.OrderVO;
 import com.sky.vo.RefundVO;
+import com.sky.websocket.OrderEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -33,15 +34,18 @@ public class AdminOrderService {
     private final OrderRefundRepository refunds;
     private final MenuPageCache menuCache;
     private final Clock clock;
+    private final OrderEventPublisher events;
 
     public AdminOrderService(EmployeePermissionService permissions, OrderRepository orders,
-            OrderLifecycleRepository lifecycle, OrderRefundRepository refunds, MenuPageCache menuCache, Clock clock) {
+            OrderLifecycleRepository lifecycle, OrderRefundRepository refunds, MenuPageCache menuCache,
+            Clock clock, OrderEventPublisher events) {
         this.permissions = permissions;
         this.orders = orders;
         this.lifecycle = lifecycle;
         this.refunds = refunds;
         this.menuCache = menuCache;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -98,7 +102,9 @@ public class AdminOrderService {
         if (current == target) return order;
         if (current != expected || locked.payStatus() != 1) throw new ConflictException("当前订单状态不能执行此操作");
         lifecycle.advance(locked, target, now(), action.note);
-        return order(id);
+        OrderVO updated = order(id);
+        events.publishAfterCommit("ORDER_STATUS_CHANGED", updated, null);
+        return updated;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -132,7 +138,9 @@ public class AdminOrderService {
             refunds.insertMockRefund(order(id), reason, time);
             lifecycle.cancelRefundedMock(current, time, reason);
         }
-        return order(id);
+        OrderVO cancelled = order(id);
+        events.publishAfterCommit("ORDER_STATUS_CHANGED", cancelled, null);
+        return cancelled;
     }
 
     private OrderLifecycleRepository.State state(long id, boolean lock) {

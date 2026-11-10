@@ -6,9 +6,11 @@ import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
-import com.sky.dto.EmployeeCreateDTO;
 
-/** 唯一已实现的自定义接口：证明环境可以启动，不代表业务可用。 */
+/**
+ * 运行环境健康检查。响应里的 businessImplemented 是早期兼容字段，固定为 false，
+ * 只表示这个接口本身不探测业务状态，不能据此判断订单、统计等业务是否实现。
+ */
 @RestController
 public class EnvironmentController {
     private final Environment environment;
@@ -22,7 +24,7 @@ public class EnvironmentController {
             "springBootVersion", SpringBootVersion.getVersion(),
             "profiles", environment.getActiveProfiles(),
             "businessImplemented", false,
-            "message", "基础环境已启动；业务、鉴权、WebSocket 和 Agent 请自行实现。"
+            "message", "基础环境健康检查；本接口不探测业务实现状态，业务能力以源码与接口合同为准。"
         ));
     }
 }
