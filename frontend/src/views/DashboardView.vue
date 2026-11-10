@@ -1,20 +1,99 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import type { EChartsOption } from 'echarts'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
+import { API_MODE } from '@/api/http'
 import { app, refreshShop, safely, updateShopStatus } from '@/stores/app'
-import { money, dateTime, localDate, statusLabels, statusColors, type Dashboard, type Order } from '@/domain/types'
+import { money, dateTime, localDate, statusLabels, statusColors, type Dashboard, type Order, type OrderStatus, type Workbench } from '@/domain/types'
 import Icon from '@/components/Icon.vue'
-import TrendChart from '@/components/TrendChart.vue'
+import EChart from '@/components/EChart.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
-const router = useRouter(); const metrics = ref<Dashboard | null>(null); const orders = ref<Order[]>([]); const loading = ref(true); const error = ref('')
+const router = useRouter()
+const metrics = ref<Dashboard | null>(null)
+const workbench = ref<Workbench | null>(null)   // 真实模式的工作台聚合数据源
+const orders = ref<Order[]>([])
+const loading = ref(true)
+const error = ref('')
+const workbenchError = ref('')
+
+// EChartsOption 是大型联合类型；统一构造入口让本页 option 保持可读。
+function chartOption(option: Record<string, unknown>): EChartsOption { return option as EChartsOption }
+
 async function load() {
   error.value = ''
-  try { const [m, o] = await Promise.all([api.metrics(), api.orders({ pageSize: 5, begin: localDate(), end: localDate() })]); metrics.value = m; orders.value = o.records }
-  catch (e) { error.value = e instanceof Error ? e.message : '加载失败' }
-  finally { loading.value = false }
+  workbenchError.value = ''
+  const today = localDate()
+  try {
+    const [m, o, w] = await Promise.all([
+      api.metrics(),
+      api.orders({ pageSize: 5, begin: today, end: today }),
+      // 工作台仅在真实模式加载；失败单独明确提示，不影响概览与今日订单，也绝不回退演示数据。
+      API_MODE === 'api'
+        ? api.workbench().catch(exception => {
+            workbenchError.value = `工作台接口加载失败：${exception instanceof Error ? exception.message : '加载失败'}`
+            return null
+          })
+        : Promise.resolve(null)
+    ])
+    metrics.value = m
+    orders.value = o.records
+    workbench.value = w
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : '加载失败'
+  } finally {
+    loading.value = false
+  }
 }
+
+const kpi = computed(() => {
+  const w = workbench.value
+  if (w) return { revenue: w.revenue, paidOrders: w.paidOrders, averageAmount: w.averageAmount, completedOrders: w.completedOrders }
+  const m = metrics.value
+  return { revenue: m?.revenue ?? 0, paidOrders: m?.paidOrders ?? 0, averageAmount: m?.averageAmount ?? 0, completedOrders: m?.completedOrders ?? 0 }
+})
+const scopeLabel = computed(() => workbench.value ? '当日' : '近 7 天')
+// pending 来自工作台时是「全部日期未完结订单」；演示模式沿用近 7 天概览。
+const pending = computed(() => workbench.value?.pending ?? metrics.value?.counts ?? {
+  UNPAID: 0, PREPARING: 0, READY_DELIVERY: 0, DELIVERING: 0, READY_PICKUP: 0, COMPLETED: 0, CANCELLED: 0
+})
+const pendingLabel = computed(() => workbench.value ? '全部待办' : '近 7 天待办')
+const pendingNote = computed(() => workbench.value
+  ? '全部待办：统计全部日期的未完结订单，不按近 7 天过滤；订单管理可查看全部记录。'
+  : '待办数量为近 7 天创建的订单；订单管理可查看全部记录。')
+
+const trendOption = computed<EChartsOption>(() => {
+  const trend = metrics.value?.trend || []
+  return chartOption({
+    tooltip: { trigger: 'axis' },
+    grid: { left: 12, right: 18, top: 24, bottom: 12, containLabel: true },
+    xAxis: {
+      type: 'category', data: trend.map(point => point.date.slice(5)),
+      axisLabel: { color: '#5d7287', fontSize: 11 },
+      axisLine: { lineStyle: { color: '#c9d9e6' } }, axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value', axisLabel: { color: '#5d7287', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#e8f0f6' } }, axisLine: { show: false }
+    },
+    series: [{
+      name: '收入（元）', type: 'line', smooth: true, data: trend.map(point => point.revenue),
+      itemStyle: { color: '#0876ba' }, areaStyle: { color: 'rgba(8,118,186,0.12)' }
+    }]
+  })
+})
+
+const statusOption = computed<EChartsOption>(() => {
+  const active: OrderStatus[] = ['UNPAID', 'PREPARING', 'READY_DELIVERY', 'DELIVERING', 'READY_PICKUP']
+  const data = active.map(status => ({ name: statusLabels[status], value: pending.value[status] }))
+  return chartOption({
+    tooltip: { trigger: 'item', formatter: '{b}：{c} 单（{d}%）' },
+    legend: { type: 'scroll', bottom: 0, textStyle: { color: '#193247' } },
+    series: [{ type: 'pie', radius: ['38%', '64%'], center: ['50%', '44%'], data, label: { color: '#193247' } }]
+  })
+})
+
 const shopStatusText = computed(() => {
   if (app.shopSaving) return '正在更新营业状态…'
   if (app.shopLoading) return '正在读取营业状态…'
@@ -33,17 +112,117 @@ onMounted(() => {
   void load()
 })
 </script>
+
 <template>
-  <div class="welcome-banner"><div><h2>{{ app.session?.name }}，今天也辛苦了。</h2><p>从一份午餐开始，把园区的每一天照顾好。</p></div><Icon class="banner-mark" name="sprout" :size="105"/><button class="banner-status" :disabled="app.shopLoading || app.shopSaving || !app.shop" @click="toggleShop"><span class="dot" :style="{ background: app.shop?.open ? '#73985d' : '#8d9fb1' }"></span>{{ shopStatusText }}<Icon name="down" :size="13"/></button></div>
+  <div class="welcome-banner">
+    <div><h2>{{ app.session?.name }}，今天也辛苦了。</h2><p>从一份午餐开始，把园区的每一天照顾好。</p></div>
+    <Icon class="banner-mark" name="sprout" :size="105" />
+    <button class="banner-status" :disabled="app.shopLoading || app.shopSaving || !app.shop" @click="toggleShop">
+      <span class="dot" :style="{ background: app.shop?.open ? '#73985d' : '#8d9fb1' }"></span>{{ shopStatusText }}<Icon name="down" :size="13" />
+    </button>
+  </div>
   <div v-if="app.shopError" class="inline-error" role="alert">
     {{ app.shopError }}
     <button class="btn text" @click="refreshShop">重试营业状态</button>
   </div>
-  <div v-if="error" class="inline-error"><Icon name="error" :size="17"/><span>{{ error }}</span><button class="btn text" @click="load">重试</button></div>
-  <div v-if="loading" class="loading-state"><Icon class="spin" name="loading"/>正在准备工作台…</div>
+  <div v-if="error" class="inline-error"><Icon name="error" :size="17" /><span>{{ error }}</span><button class="btn text" @click="load">重试</button></div>
+  <div v-if="workbenchError" class="inline-error"><Icon name="error" :size="17" /><span>{{ workbenchError }}</span><button class="btn text" @click="load">重试</button></div>
+  <div v-if="loading" class="loading-state"><Icon class="spin" name="loading" />正在准备工作台…</div>
+
   <template v-if="metrics">
-    <div class="metric-grid"><div class="metric-card highlight"><div class="metric-top"><span>近 7 天收入</span><span class="metric-icon"><Icon name="reports" :size="17"/></span></div><div class="metric-value"><small>¥</small>{{ money(metrics.revenue) }}</div><div class="metric-note"><span class="positive">按支付时间统计</span><span>不含模拟退款</span></div></div><div class="metric-card"><div class="metric-top"><span>已支付订单</span><span class="metric-icon"><Icon name="orders" :size="17"/></span></div><div class="metric-value">{{ metrics.paidOrders }}<small style="margin-left:5px;font-size:12px;color:var(--muted)">笔</small></div><div class="metric-note">近 7 天支付成功的订单</div></div><div class="metric-card"><div class="metric-top"><span>平均实付</span><span class="metric-icon"><Icon name="payment" :size="17"/></span></div><div class="metric-value"><small>¥</small>{{ money(metrics.averageAmount) }}</div><div class="metric-note">收入 / 已支付订单数</div></div><div class="metric-card"><div class="metric-top"><span>已完成订单</span><span class="metric-icon"><Icon name="success" :size="17"/></span></div><div class="metric-value">{{ metrics.completedOrders }}<small style="margin-left:5px;font-size:12px;color:var(--muted)">笔</small></div><div class="metric-note">按订单创建日期筛选</div></div></div>
-    <div class="grid-two"><div class="stack"><section class="panel"><div class="panel-head"><div><h2>收入趋势</h2><p>{{ metrics.period.begin }} — {{ metrics.period.end }}</p></div><span class="chart-legend"><span class="dot"></span>收入（元）</span></div><TrendChart :values="metrics.trend"/></section><section class="panel"><div class="panel-head"><h2>订单待办</h2><RouterLink to="/admin/orders" class="text-link">查看全部<Icon name="right" :size="13"/></RouterLink></div><div class="order-shortcut-grid"><button class="order-shortcut" @click="router.push('/admin/orders?status=UNPAID')"><span class="shortcut-icon"><Icon name="clock"/></span><strong>{{ metrics.counts.UNPAID }}</strong><small>待支付</small></button><button class="order-shortcut" @click="router.push('/admin/orders?status=PREPARING')"><span class="shortcut-icon"><Icon name="dish"/></span><strong>{{ metrics.counts.PREPARING }}</strong><small>制作中</small></button><button class="order-shortcut" @click="router.push('/admin/orders?status=READY_DELIVERY')"><span class="shortcut-icon"><Icon name="truck"/></span><strong>{{ metrics.counts.READY_DELIVERY }}</strong><small>待配送</small></button><button class="order-shortcut" @click="router.push('/admin/orders?status=READY_PICKUP')"><span class="shortcut-icon"><Icon name="cart"/></span><strong>{{ metrics.counts.READY_PICKUP }}</strong><small>待自提</small></button></div><p class="metric-detail">待办数量为近 7 天创建的订单；订单管理可查看全部记录。</p></section></div><div class="stack"><section class="panel"><div class="panel-head"><div><h2>人气菜单</h2><p>近 7 天销量排行</p></div><RouterLink to="/admin/reports" class="text-link"><Icon name="upRight" :size="17"/></RouterLink></div><div class="ranking-list"><div v-for="(item, i) in metrics.sales.slice(0, 5)" :key="item.id" class="ranking-item"><span class="rank-number" :class="{ top: i < 3 }">{{ i + 1 }}</span><div class="ranking-main"><div class="ranking-name">{{ item.name }}<span>{{ item.quantity }} 份</span></div><div class="rank-track"><i :style="{ width: (item.quantity / (metrics.sales[0]?.quantity || 1) * 100) + '%' }"></i></div></div></div><EmptyState v-if="!metrics.sales.length" title="暂无销量" description="支付订单产生后可统计。"/></div></section><section class="agent-card"><h3><Icon name="agent" :size="19"/>你的运营助手<span class="tiny-label">AGENT</span></h3><p>查营业额、看销量，或准备一项运营操作。<br>让数据为你的下一步提供依据。</p><RouterLink to="/admin/agent" class="btn lime">与助手聊聊<Icon name="arrow" :size="14"/></RouterLink><Icon name="agent" class="agent-symbol" :size="65"/></section><div class="quick-link-row"><RouterLink to="/admin/dishes" class="quick-link"><Icon name="plus" :size="18"/>维护菜品</RouterLink><RouterLink to="/admin/setmeals" class="quick-link"><Icon name="setmeal" :size="18"/>组合套餐</RouterLink><RouterLink to="/admin/reports" class="quick-link"><Icon name="reports" :size="18"/>经营统计</RouterLink></div></div></div>
+    <div class="metric-grid">
+      <div class="metric-card highlight">
+        <div class="metric-top"><span>{{ scopeLabel }}收入</span><span class="metric-icon"><Icon name="reports" :size="17" /></span></div>
+        <div class="metric-value"><small>¥</small>{{ money(kpi.revenue) }}</div>
+        <div class="metric-note"><span class="positive">按支付成功时间统计</span><span>历史实付，含后来退款</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-top"><span>已支付订单</span><span class="metric-icon"><Icon name="orders" :size="17" /></span></div>
+        <div class="metric-value">{{ kpi.paidOrders }}<small style="margin-left:5px;font-size:12px;color:var(--muted)">笔</small></div>
+        <div class="metric-note">{{ scopeLabel }}支付成功的订单</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-top"><span>平均实付</span><span class="metric-icon"><Icon name="payment" :size="17" /></span></div>
+        <div class="metric-value"><small>¥</small>{{ money(kpi.averageAmount) }}</div>
+        <div class="metric-note">收入 / 已支付订单数</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-top"><span>已完成订单</span><span class="metric-icon"><Icon name="success" :size="17" /></span></div>
+        <div class="metric-value">{{ kpi.completedOrders }}<small style="margin-left:5px;font-size:12px;color:var(--muted)">笔</small></div>
+        <div class="metric-note">{{ scopeLabel }}完成 / 创建统计</div>
+      </div>
+    </div>
+
+    <div class="grid-two">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>收入趋势</h2><p>{{ metrics.period.begin }} — {{ metrics.period.end }}</p></div>
+            <span class="chart-legend"><span class="dot"></span>收入（元）</span>
+          </div>
+          <EChart :option="trendOption" height="240px" />
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>待办状态分布</h2><p>{{ pendingLabel }}</p></div></div>
+          <EChart :option="statusOption" height="240px" />
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>订单待办 · {{ pendingLabel }}</h2><RouterLink to="/admin/orders" class="text-link">查看全部<Icon name="right" :size="13" /></RouterLink></div>
+          <div class="order-shortcut-grid">
+            <button class="order-shortcut" @click="router.push('/admin/orders?status=UNPAID')"><span class="shortcut-icon"><Icon name="clock" /></span><strong>{{ pending.UNPAID }}</strong><small>待支付</small></button>
+            <button class="order-shortcut" @click="router.push('/admin/orders?status=PREPARING')"><span class="shortcut-icon"><Icon name="dish" /></span><strong>{{ pending.PREPARING }}</strong><small>制作中</small></button>
+            <button class="order-shortcut" @click="router.push('/admin/orders?status=READY_DELIVERY')"><span class="shortcut-icon"><Icon name="truck" /></span><strong>{{ pending.READY_DELIVERY }}</strong><small>待配送</small></button>
+            <button class="order-shortcut" @click="router.push('/admin/orders?status=READY_PICKUP')"><span class="shortcut-icon"><Icon name="cart" /></span><strong>{{ pending.READY_PICKUP }}</strong><small>待自提</small></button>
+          </div>
+          <p class="metric-detail">{{ pendingNote }}</p>
+        </section>
+      </div>
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-head"><div><h2>人气菜单</h2><p>{{ metrics.period.begin }} — {{ metrics.period.end }} 有效成交销量</p></div><RouterLink to="/admin/reports" class="text-link"><Icon name="upRight" :size="17" /></RouterLink></div>
+          <div class="ranking-list">
+            <div v-for="(item, i) in metrics.sales.slice(0, 5)" :key="item.id" class="ranking-item">
+              <span class="rank-number" :class="{ top: i < 3 }">{{ i + 1 }}</span>
+              <div class="ranking-main">
+                <div class="ranking-name">{{ item.name }}<span>{{ item.quantity }} 份</span></div>
+                <div class="rank-track"><i :style="{ width: (item.quantity / (metrics.sales[0]?.quantity || 1) * 100) + '%' }"></i></div>
+              </div>
+            </div>
+            <EmptyState v-if="!metrics.sales.length" title="暂无销量" description="支付订单产生后可统计。" />
+          </div>
+        </section>
+        <section class="agent-card">
+          <h3><Icon name="agent" :size="19" />你的运营助手<span class="tiny-label">AGENT</span></h3>
+          <p>查营业额、看销量，或准备一项运营操作。<br>让数据为你的下一步提供依据。</p>
+          <RouterLink to="/admin/agent" class="btn lime">与助手聊聊<Icon name="arrow" :size="14" /></RouterLink>
+          <Icon name="agent" class="agent-symbol" :size="65" />
+        </section>
+        <div class="quick-link-row">
+          <RouterLink to="/admin/dishes" class="quick-link"><Icon name="plus" :size="18" />维护菜品</RouterLink>
+          <RouterLink to="/admin/setmeals" class="quick-link"><Icon name="setmeal" :size="18" />组合套餐</RouterLink>
+          <RouterLink to="/admin/reports" class="quick-link"><Icon name="reports" :size="18" />经营统计</RouterLink>
+        </div>
+      </div>
+    </div>
   </template>
-  <section class="panel table-panel section-gap"><div class="panel-head"><div><h2>今日订单</h2><p>最新的园区餐饮动态</p></div><RouterLink to="/admin/orders" class="text-link">订单管理<Icon name="right" :size="13"/></RouterLink></div><div class="table-scroll"><table v-if="orders.length"><thead><tr><th>订单号 / 时间</th><th>员工</th><th>订单内容</th><th>金额</th><th>状态</th><th></th></tr></thead><tbody><tr v-for="order in orders" :key="order.id"><td class="order-id">{{ order.number }}<span class="table-sub">{{ dateTime(order.createdAt) }}</span></td><td>{{ order.userName }}</td><td>{{ order.lines[0]?.name }}<span v-if="order.lines.length > 1"> 等 {{ order.lines.length }} 项</span></td><td class="strong">¥{{ money(order.amount) }}</td><td><span class="badge" :class="statusColors[order.status]">{{ statusLabels[order.status] }}</span></td><td><button class="btn text" @click="router.push('/admin/orders?detail=' + order.id)">查看<Icon name="right" :size="12"/></button></td></tr></tbody></table><EmptyState v-else title="今天还没有订单" description="员工下单后，新订单会出现在这里。" icon="orders"/></div></section>
+
+  <section class="panel table-panel section-gap">
+    <div class="panel-head"><div><h2>今日订单</h2><p>最新的园区餐饮动态</p></div><RouterLink to="/admin/orders" class="text-link">订单管理<Icon name="right" :size="13" /></RouterLink></div>
+    <div class="table-scroll">
+      <table v-if="orders.length">
+        <thead><tr><th>订单号 / 时间</th><th>员工</th><th>订单内容</th><th>金额</th><th>状态</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="order in orders" :key="order.id">
+            <td class="order-id">{{ order.number }}<span class="table-sub">{{ dateTime(order.createdAt) }}</span></td>
+            <td>{{ order.userName }}</td>
+            <td>{{ order.lines[0]?.name }}<span v-if="order.lines.length > 1"> 等 {{ order.lines.length }} 项</span></td>
+            <td class="strong">¥{{ money(order.amount) }}</td>
+            <td><span class="badge" :class="statusColors[order.status]">{{ statusLabels[order.status] }}</span></td>
+            <td><button class="btn text" @click="router.push('/admin/orders?detail=' + order.id)">查看<Icon name="right" :size="12" /></button></td>
+          </tr>
+        </tbody>
+      </table>
+      <EmptyState v-else title="今天还没有订单" description="员工下单后，新订单会出现在这里。" icon="orders" />
+    </div>
+  </section>
 </template>

@@ -1,8 +1,8 @@
-import { API_MODE, readSession, request } from './http'
+import { API_MODE, download, readSession, request } from './http'
 import { mock } from './mock'
 import { initialPasswordError } from '@/domain/operatorPassword'
 import { menuFormError } from '@/domain/menuForm'
-import type { Address, AgentReply, CartLine, Category, CategoryPageQuery, Dashboard, ListQuery, MenuItem, Operator, OperatorPageQuery, Order, Page, Role, Session, Shop } from '@/domain/types'
+import type { Address, AgentReply, CartLine, Category, CategoryPageQuery, Dashboard, ExportReportType, ListQuery, MenuItem, Operator, OperatorPageQuery, Order, OrderReport, Page, RevenueReport, Role, SalesReport, Session, Shop, UrgeReply, UserReport, Workbench } from '@/domain/types'
 
 // 所有真实接口集中于此；API_CONTRACT.md 与此文件保持一致。
 const rolePath = () => readSession()?.role === 'admin' ? '/admin' : '/user'
@@ -116,6 +116,35 @@ export const api = {
   order: (id: number) => select(() => mock.order(id), () => request<Order>(`${rolePath()}/order/${id}`)),
   orderAction: (id: number, action: 'pay' | 'cancel' | 'ready' | 'deliver' | 'complete') => select(() => mock.orderAction(id, action), () => request<Order>(`${rolePath()}/order/${id}/${action}`, 'POST')),
   metrics: (begin?: string, end?: string) => select(() => mock.metrics(begin, end), () => request<Dashboard>('/admin/report/overview', 'GET', undefined, { begin, end })),
+  revenueReport: (begin?: string, end?: string) => select(
+    () => mock.revenueReport(begin, end),
+    () => request<RevenueReport>('/admin/report/revenue', 'GET', undefined, { begin, end })
+  ),
+  usersReport: (begin?: string, end?: string) => select(
+    () => mock.usersReport(begin, end),
+    () => request<UserReport>('/admin/report/users', 'GET', undefined, { begin, end })
+  ),
+  ordersReport: (begin?: string, end?: string) => select(
+    () => mock.ordersReport(begin, end),
+    () => request<OrderReport>('/admin/report/orders', 'GET', undefined, { begin, end })
+  ),
+  salesReport: (query: { begin?: string; end?: string; kind?: 'dish' | 'setmeal'; topN?: number } = {}) => select(
+    () => mock.salesReport(query),
+    () => request<SalesReport>('/admin/report/sales', 'GET', undefined, { ...query })
+  ),
+  workbench: (date?: string) => select(
+    () => mock.workbench(date),
+    () => request<Workbench>('/admin/workbench', 'GET', undefined, { date })
+  ),
+  urgeOrder: (id: number) => select(
+    () => mock.urgeOrder(id),
+    () => request<UrgeReply>(`/user/order/${id}/urge`, 'POST')
+  ),
+  // 导出是二进制 xlsx，不能走只解析 JSON 的 request()。
+  exportReport: (type: ExportReportType, begin: string, end: string) => select(
+    () => mock.exportReport(type, begin, end),
+    () => download('/admin/report/export', { type, begin, end }, `园味报表_${type}_${begin}_${end}.xlsx`)
+  ),
   chat: (message: string, sessionId: string) => select(() => mock.chat(message, sessionId), () => request<AgentReply>('/agent/chat', 'POST', { message, sessionId })),
   confirmAction: (id: string) => select(() => mock.confirmAction(id), () => request<{ content: string }>(`/agent/actions/${encodeURIComponent(id)}/confirm`, 'POST', {})),
   cancelAction: (id: string) => select(() => mock.cancelAction(id), () => request<void>(`/agent/actions/${encodeURIComponent(id)}/cancel`, 'POST', {})),

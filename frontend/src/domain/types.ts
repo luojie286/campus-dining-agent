@@ -42,12 +42,57 @@ export interface Dashboard {
   sales: { id: number; name: string; quantity: number; amount: number }[]
   period: { begin: string; end: string }; metricNote: string
 }
+// 报表与工作台：字段口径以 docs/API_OPENAPI.json 的 components.schemas 为准。
+export interface Period { begin: string; end: string }
+export type ReportStatusCounts = Record<OrderStatus, number>
+export interface StockCounts { onSale: number; offSale: number }
+
+export interface RevenueTrendPoint {
+  date: string; grossPaidAmount: number; refundAmount: number; netCashAmount: number; paidOrders: number
+}
+export interface RevenueReport {
+  period: Period; grossPaidAmount: number; refundAmount: number; netCashAmount: number
+  paidOrders: number; trend: RevenueTrendPoint[]; metricNote: string
+}
+
+export interface UserTrendPoint {
+  date: string; newUsers: number; totalUsers: number; orderingUsers: number; payingUsers: number
+}
+export interface UserReport {
+  period: Period; newUsers: number; totalUsers: number; orderingUsers: number; payingUsers: number
+  trend: UserTrendPoint[]; metricNote: string
+}
+
+export interface OrderTrendPoint {
+  date: string; createdOrders: number; paidOrders: number; validOrders: number
+  completedOrders: number; cancelledOrders: number
+}
+export interface OrderReport {
+  period: Period; createdOrders: number; paidOrders: number; validOrders: number
+  completedOrders: number; cancelledOrders: number; completionRate: number
+  counts: ReportStatusCounts; trend: OrderTrendPoint[]; metricNote: string
+}
+
+export interface SalesItem { id: number; name: string; quantity: number; amount: number }
+export interface SalesReport { period: Period; items: SalesItem[]; metricNote: string }
+
+export interface Workbench {
+  businessDate: string; shop: Shop; revenue: number; paidOrders: number; createdOrders: number
+  completedOrders: number; averageAmount: number; pending: ReportStatusCounts
+  dishCounts: StockCounts; setmealCounts: StockCounts; metricNote: string
+}
+
+// 催单成功响应：nextAllowedAt 在达到总上限后省略。
+export interface UrgeReply {
+  orderId: number; acceptedAt: string; nextAllowedAt?: string; urgeCount: number; remaining: number
+}
 export interface WsTicket { ticket: string; expiresAt?: string }
 export interface WebSocketOrderMessage {
   eventId: string; type: 'NEW_ORDER' | 'ORDER_STATUS_CHANGED' | 'ORDER_URGED'
   orderId: number; orderNumber: string; occurredAt: string
   status?: OrderStatus; urgeCount?: number
 }
+export type ExportReportType = 'summary' | 'orders' | 'sales' | 'users'
 
 export interface Page<T> { total: number; records: T[] }
 export interface OperatorPageQuery { page?: number; pageSize?: number; name?: string; status?: 0 | 1 }
@@ -56,6 +101,7 @@ export interface ToolTrace { name: string; summary: string; state: 'success' | '
 export interface PendingAction { id: string; label: string; detail: string; expiresAt: string }
 export interface AgentReply { sessionId: string; content: string; items?: MenuItem[]; orders?: Order[]; metrics?: Dashboard; traces: ToolTrace[]; action?: PendingAction }
 export interface ChatMessage extends Partial<AgentReply> { id: string; role: 'user' | 'assistant'; content: string; actionState?: 'confirmed' | 'cancelled' }
+
 export const statusLabels: Record<OrderStatus, string> = {
   UNPAID: '待支付', PREPARING: '制作中', READY_DELIVERY: '待配送', DELIVERING: '配送中',
   READY_PICKUP: '待自提', COMPLETED: '已完成', CANCELLED: '已取消'

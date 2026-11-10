@@ -4,8 +4,10 @@ import { localDate, statusLabels, type Address, type AgentReply, type CartLine, 
 import { readSession } from './http'
 import { canManageOperators } from '@/domain/permissions'
 import { initialPasswordError } from '@/domain/operatorPassword'
+import { downloadCsv } from '@/utils/export'
 import type { CategoryPageQuery } from '@/domain/types'
 import type { OperatorPageQuery } from '@/domain/types'
+import type { ExportReportType, OrderReport, ReportStatusCounts, RevenueReport, SalesReport, UrgeReply, UserReport, Workbench } from '@/domain/types'
 
 const DATA_KEY = 'campus-demo-v1'
 let data: DemoData
@@ -101,6 +103,23 @@ function dates(begin?: string, end?: string): { begin: string; end: string } {
 
 interface ActionRecord { owner: number; role: Role; kind: 'cancel' | 'sale'; targetId: number; previous: string | number; expiresAt: number; executed: boolean; cancelled: boolean }
 const actions = new Map<string, ActionRecord>()
+// 演示催单计数与冷却；仅保存在内存，刷新后重置。
+const urgeRecords = new Map<number, { count: number; lastAt: number }>()
+
+// 演示报表：按本地日期把订单分桶，从 metrics 的零填充趋势派生逐日数据。
+function groupByDay(orders: Order[], dayOf: (order: Order) => string): Map<string, Order[]> {
+  const buckets = new Map<string, Order[]>()
+  for (const order of orders) {
+    const key = dayOf(order)
+    const bucket = buckets.get(key) || []
+    bucket.push(order)
+    buckets.set(key, bucket)
+  }
+  return buckets
+}
+function statusCounts(orders: Order[]): ReportStatusCounts {
+  return Object.fromEntries(Object.keys(statusLabels).map(key => [key, orders.filter(order => order.status === key).length])) as ReportStatusCounts
+}
 
 export const mock = {
   async login(role: Role, username: string, password: string): Promise<Session> {
@@ -436,6 +455,167 @@ export const mock = {
     if (!action || action.owner !== s.id || action.role !== s.role) throw new Error('确认记录不存在或不属于当前身份')
     if (action.executed) throw new Error('操作已经执行，不能撤销确认记录')
     action.cancelled = true
+  },
+  // 演示模式的对话留在浏览器 sessionStorage；这里提供结构兼容的空会话与本地确认状态。
+  async revenueReport(begin?: string, end?: string): Promise<RevenueReport> {
+    const metrics = await mock.metrics(begin, end)
+    const paidByDay = groupByDay(
+      database().orders.filter(order => order.payStatus === 'PAID' && order.paidAt && localDate(order.paidAt) >= metrics.period.begin && localDate(order.paidAt) <= metrics.period.end),
+      order => localDate(order.paidAt!)
+    )
+    const trend = metrics.trend.map(point => {
+      const dayPaid = paidByDay.get(point.date) || []
+      const grossPaidAmount = dayPaid.reduce((sum, order) => sum + order.amount, 0)
+      return { date: point.date, grossPaidAmount, refundAmount: 0, netCashAmount: grossPaidAmount, paidOrders: dayPaid.length }
+    })
+    return clone({
+      period: metrics.period,
+      grossPaidAmount: metrics.revenue,
+      refundAmount: 0,
+      netCashAmount: metrics.revenue,
+      paidOrders: metrics.paidOrders,
+      trend,
+      metricNote: '演示口径：按支付时间统计历史实付总额；演示退款额为 0，净现金流入 = 实付 - 退款，非财务净利润。'
+    })
+  },
+  async usersReport(begin?: string, end?: string): Promise<UserReport> {
+    const metrics = await mock.metrics(begin, end)
+    const all = database().orders
+    const inPeriod = (time: string) => localDate(time) >= metrics.period.begin && localDate(time) <= metrics.period.end
+    const created = all.filter(order => inPeriod(order.createdAt))
+    const paid = all.filter(order => order.payStatus === 'PAID' && order.paidAt && inPeriod(order.paidAt))
+    const distinctUsers = (orders: Order[]) => new Set(orders.map(order => order.userId)).size
+    const createdByDay = groupByDay(created, order => localDate(order.createdAt))
+    const paidByDay = groupByDay(paid, order => localDate(order.paidAt!))
+    // 先纳入区间前已出现的用户，保证逐日 totalUsers 是累计去重数。
+    const seen = new Set(all.filter(order => localDate(order.createdAt) < metrics.period.begin).map(order => order.userId))
+    const trend = metrics.trend.map(point => {
+      const dayCreated = createdByDay.get(point.date) || []
+      const dayPaid = paidByDay.get(point.date) || []
+      const newUsers = dayCreated.filter(order => !seen.has(order.userId)).length
+      dayCreated.forEach(order => seen.add(order.userId))
+      return { date: point.date, newUsers, totalUsers: seen.size, orderingUsers: distinctUsers(dayCreated), payingUsers: distinctUsers(dayPaid) }
+    })
+    return clone({
+      period: metrics.period,
+      newUsers: trend.reduce((sum, point) => sum + point.newUsers, 0),
+      totalUsers: seen.size,
+      orderingUsers: distinctUsers(created),
+      payingUsers: distinctUsers(paid),
+      trend,
+      metricNote: '演示口径：用户来自订单演示数据（无独立注册表），按订单创建/付款的不同用户去重；totalUsers 为截至该日累计去重数，非真实注册数。'
+    })
+  },
+  async ordersReport(begin?: string, end?: string): Promise<OrderReport> {
+    const metrics = await mock.metrics(begin, end)
+    const all = database().orders
+    const inPeriod = (time: string) => localDate(time) >= metrics.period.begin && localDate(time) <= metrics.period.end
+    const created = all.filter(order => inPeriod(order.createdAt))
+    const paid = all.filter(order => order.payStatus === 'PAID' && order.paidAt && inPeriod(order.paidAt))
+    const createdByDay = groupByDay(created, order => localDate(order.createdAt))
+    const paidByDay = groupByDay(paid, order => localDate(order.paidAt!))
+    const isValid = (order: Order) => order.payStatus === 'PAID' && order.status !== 'CANCELLED'
+    const trend = metrics.trend.map(point => {
+      const dayCreated = createdByDay.get(point.date) || []
+      return {
+        date: point.date,
+        createdOrders: dayCreated.length,
+        paidOrders: (paidByDay.get(point.date) || []).length,
+        validOrders: dayCreated.filter(isValid).length,
+        completedOrders: dayCreated.filter(order => order.status === 'COMPLETED').length,
+        cancelledOrders: dayCreated.filter(order => order.status === 'CANCELLED').length
+      }
+    })
+    return clone({
+      period: metrics.period,
+      createdOrders: created.length,
+      paidOrders: paid.length,
+      validOrders: created.filter(isValid).length,
+      completedOrders: metrics.counts.COMPLETED,
+      cancelledOrders: metrics.counts.CANCELLED,
+      completionRate: created.length ? Number((metrics.counts.COMPLETED / created.length * 100).toFixed(2)) : 0,
+      counts: metrics.counts,
+      trend,
+      metricNote: '演示口径：createdOrders/counts 按创建日期与当前履约状态；paidOrders 按付款时间是另一时间口径；有效订单为已付且未取消。'
+    })
+  },
+  async salesReport(query: { begin?: string; end?: string; kind?: 'dish' | 'setmeal'; topN?: number } = {}): Promise<SalesReport> {
+    const metrics = await mock.metrics(query.begin, query.end)
+    const menu = database().menu
+    let items = [...metrics.sales]
+    if (query.kind) items = items.filter(item => menu.find(entry => entry.id === item.id)?.kind === query.kind)
+    const topN = Math.max(1, Math.min(100, Number(query.topN) || 10))
+    items = items.sort((left, right) => right.quantity - left.quantity || left.id - right.id).slice(0, topN)
+    return clone({
+      period: metrics.period,
+      items,
+      metricNote: '演示口径：按支付时间聚合有效成交明细，套餐作为独立商品不拆分；销量降序、id 升序，topN 默认 10。'
+    })
+  },
+  async workbench(date?: string): Promise<Workbench> {
+    requireSession('admin'); expireOrders()
+    const businessDate = date || localDate()
+    const db = database()
+    const onDay = (time: string) => localDate(time) === businessDate
+    const dayCreated = db.orders.filter(order => onDay(order.createdAt))
+    const dayPaid = db.orders.filter(order => order.payStatus === 'PAID' && order.paidAt && onDay(order.paidAt))
+    const revenue = dayPaid.reduce((sum, order) => sum + order.amount, 0)
+    const countsFor = (list: typeof db.menu) => ({
+      onSale: list.filter(item => item.status === 1).length,
+      offSale: list.filter(item => item.status === 0).length
+    })
+    return clone({
+      businessDate,
+      shop: db.shop,
+      revenue,
+      paidOrders: dayPaid.length,
+      createdOrders: dayCreated.length,
+      completedOrders: dayCreated.filter(order => order.status === 'COMPLETED').length,
+      averageAmount: dayPaid.length ? revenue / dayPaid.length : 0,
+      // pending 统计全部日期的未完结订单，不能按近 7 天过滤漏掉旧待办。
+      pending: statusCounts(db.orders),
+      dishCounts: countsFor(db.menu.filter(item => item.kind === 'dish')),
+      setmealCounts: countsFor(db.menu.filter(item => item.kind === 'setmeal')),
+      metricNote: '演示口径：收入/支付数按当日付款，创建/完成按当日创建订单的当前状态；待办统计全部日期未完结订单；上下架数量按当前商品状态。'
+    })
+  },
+  async urgeOrder(id: number): Promise<UrgeReply> {
+    requireSession('user')
+    const order = ownedOrder(id)
+    const allowed = ['PREPARING', 'READY_DELIVERY', 'DELIVERING', 'READY_PICKUP']
+    if (order.payStatus !== 'PAID' || !allowed.includes(order.status)) {
+      throw new Error('演示：该订单当前状态不允许催单（需已支付且未完成）。')
+    }
+    const now = Date.now()
+    const record = urgeRecords.get(id) || { count: 0, lastAt: 0 }
+    if (record.count >= 5) throw new Error('演示：该订单催单次数已达 5 次上限。')
+    if (now - record.lastAt < 60000) throw new Error('演示：催单太频繁，请 60 秒后再试。')
+    record.count++
+    record.lastAt = now
+    urgeRecords.set(id, record)
+    const remaining = 5 - record.count
+    const reply: UrgeReply = { orderId: id, acceptedAt: new Date(now).toISOString(), urgeCount: record.count, remaining }
+    if (remaining > 0) reply.nextAllowedAt = new Date(now + 60000).toISOString()
+    return clone(reply)
+  },
+  async exportReport(type: ExportReportType, begin: string, end: string): Promise<void> {
+    const metrics = await mock.metrics(begin, end)
+    const rows: (string | number)[][] = [
+      ['园味经营报表（演示 CSV，非 Excel）'],
+      ['统计范围', metrics.period.begin, metrics.period.end],
+      ['统计口径', metrics.metricNote],
+      []
+    ]
+    if (type === 'summary' || type === 'orders') {
+      rows.push(['日期', '收入（元）', '创建订单（笔）'], ...metrics.trend.map(point => [point.date, point.revenue.toFixed(2), point.orders]))
+      rows.push([], ['商品', '销量（份）', '销售额（元）'], ...metrics.sales.map(item => [item.name, item.quantity, item.amount.toFixed(2)]))
+    } else if (type === 'sales') {
+      rows.push(['商品', '销量（份）', '销售额（元）'], ...metrics.sales.map(item => [item.name, item.quantity, item.amount.toFixed(2)]))
+    } else {
+      rows.push(['指标', '数值'], ['支付订单', metrics.paidOrders], ['创建订单', metrics.orderCount], ['已完成', metrics.counts.COMPLETED], ['已取消', metrics.counts.CANCELLED])
+    }
+    // 演示模式不伪造真正 xlsx：生成明确标注的 CSV，保证按钮可用且不冒充 Excel。
+    downloadCsv(`园味报表_${type}_${metrics.period.begin}_${metrics.period.end}_演示.csv`, rows)
   },
   async reset(): Promise<void> { requireSession('admin'); data = createSeed(); persist(); actions.clear(); notifyOrder() }
 }
